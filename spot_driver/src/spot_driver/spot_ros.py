@@ -239,6 +239,11 @@ class SpotROS():
         resp = self.spot_wrapper.claim()
         return TriggerResponse(resp[0], resp[1])
 
+    def handle_force_claim(self, req):
+        """ROS service handler for the forceful variant of claim service"""
+        resp = self.spot_wrapper.force_claim()
+        return TriggerResponse(resp[0], resp[1])
+
     def handle_release(self, req):
         """ROS service handler for the release service"""
         resp = self.spot_wrapper.release()
@@ -519,7 +524,7 @@ class SpotROS():
 
         self.logger = logging.getLogger('rosout')
 
-        rospy.loginfo("Starting ROS driver for Spot")
+        rospy.loginfo("Starting ROS driver for Spot at "+str(self.hostname)+" as "+str(self.username)+" "+str(self.password))
         self.spot_wrapper = SpotWrapper(self.username, self.password, self.hostname, self.logger, self.estop_timeout, self.rates, self.callbacks)
 
         if self.spot_wrapper.is_valid:
@@ -573,6 +578,7 @@ class SpotROS():
             rospy.Subscriber('body_pose', Pose, self.bodyPoseCallback, queue_size = 1)
 
             rospy.Service("claim", Trigger, self.handle_claim)
+            rospy.Service("force_claim", Trigger, self.handle_force_claim)
             rospy.Service("release", Trigger, self.handle_release)
             rospy.Service("stop", Trigger, self.handle_stop)
             rospy.Service("self_right", Trigger, self.handle_self_right)
