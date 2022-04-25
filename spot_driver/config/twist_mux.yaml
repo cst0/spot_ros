@@ -2,7 +2,7 @@ topics:
 - name    : bt_joy
   topic   : bluetooth_teleop/cmd_vel
   timeout : 0.5
-  priority: 9
+  priority: 1
 - name    : interactive_marker
   topic   : twist_marker_server/cmd_vel
   timeout : 0.5
@@ -10,5 +10,5 @@ topics:
 - name    : external
   topic   : cmd_vel
   timeout : 0.5
-  priority: 1
+  priority: 9
 locks: []
