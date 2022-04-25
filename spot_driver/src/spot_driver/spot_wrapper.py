@@ -1,9 +1,11 @@
 import time
 import math
+import rospy
 
 from bosdyn.client import create_standard_sdk, ResponseError, RpcError
 from bosdyn.client.async_tasks import AsyncPeriodicQuery, AsyncTasks
 from bosdyn.geometry import EulerZXY
+from bosdyn import geometry
 
 from bosdyn.client.robot_state import RobotStateClient
 from bosdyn.client.robot_command import RobotCommandClient, RobotCommandBuilder
@@ -22,9 +24,11 @@ from bosdyn.client import frame_helpers
 from bosdyn.client import math_helpers
 from bosdyn.client.exceptions import InternalServerError
 
+from spot_driver.arm.arm_wrapper import ArmWrapper
+
 from . import graph_nav_util
 
-import bosdyn.api.robot_state_pb2 as robot_state_proto
+import bosdyn.api.robot_state_pb2
 from bosdyn.api import basic_command_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -140,77 +144,85 @@ class AsyncIdle(AsyncPeriodicQuery):
         self._spot_wrapper = spot_wrapper
 
     def _start_query(self):
-        if self._spot_wrapper._last_stand_command != None:
-            try:
-                response = self._client.robot_command_feedback(self._spot_wrapper._last_stand_command)
-                self._spot_wrapper._is_sitting = False
-                if (response.feedback.synchronized_feedback.mobility_command_feedback.stand_feedback.status ==
-                        basic_command_pb2.StandCommand.Feedback.STATUS_IS_STANDING):
-                    self._spot_wrapper._is_standing = True
-                    self._spot_wrapper._last_stand_command = None
-                else:
-                    self._spot_wrapper._is_standing = False
-            except (ResponseError, RpcError) as e:
-                self._logger.error("Error when getting robot command feedback: %s", e)
-                self._spot_wrapper._last_stand_command = None
-
-        if self._spot_wrapper._last_sit_command != None:
-            try:
-                self._spot_wrapper._is_standing = False
-                response = self._client.robot_command_feedback(self._spot_wrapper._last_sit_command)
-                if (response.feedback.synchronized_feedback.mobility_command_feedback.sit_feedback.status ==
-                        basic_command_pb2.SitCommand.Feedback.STATUS_IS_SITTING):
-                    self._spot_wrapper._is_sitting = True
-                    self._spot_wrapper._last_sit_command = None
-                else:
-                    self._spot_wrapper._is_sitting = False
-            except (ResponseError, RpcError) as e:
-                self._logger.error("Error when getting robot command feedback: %s", e)
-                self._spot_wrapper._last_sit_command = None
-
-        is_moving = False
-
+        self._spot_wrapper._is_moving = False
         if self._spot_wrapper._last_velocity_command_time != None:
             if time.time() < self._spot_wrapper._last_velocity_command_time:
-                is_moving = True
+                self._spot_wrapper._is_moving = True
             else:
                 self._spot_wrapper._last_velocity_command_time = None
 
-        if self._spot_wrapper._last_trajectory_command != None:
-            try:
-                response = self._client.robot_command_feedback(self._spot_wrapper._last_trajectory_command)
-                status = response.feedback.synchronized_feedback.mobility_command_feedback.se2_trajectory_feedback.status
-                # STATUS_AT_GOAL always means that the robot reached the goal. If the trajectory command did not
-                # request precise positioning, then STATUS_NEAR_GOAL also counts as reaching the goal
-                if status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_AT_GOAL or \
-                    (status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_NEAR_GOAL and
-                     not self._spot_wrapper._last_trajectory_command_precise):
-                    self._spot_wrapper._at_goal = True
-                    # Clear the command once at the goal
-                    self._spot_wrapper._last_trajectory_command = None
-                elif status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_GOING_TO_GOAL:
-                    is_moving = True
-                elif status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_NEAR_GOAL:
-                    is_moving = True
-                    self._spot_wrapper._near_goal = True
-                else:
-                    self._spot_wrapper._last_trajectory_command = None
-            except (ResponseError, RpcError) as e:
-                self._logger.error("Error when getting robot command feedback: %s", e)
-                self._spot_wrapper._last_trajectory_command = None
 
-        self._spot_wrapper._is_moving = is_moving
+        if not self._spot_wrapper._is_moving:
+            if self._spot_wrapper._last_stand_command != None:
+                hold_arbitrary_pose = False
+                if self._spot_wrapper._hold_pose_til is not None and time.time() < self._spot_wrapper._hold_pose_til:
+                    hold_arbitrary_pose = True
+                try:
+                    response = self._client.robot_command_feedback(self._spot_wrapper._last_stand_command)
+                    self._spot_wrapper._is_sitting = False
+                    if (response.feedback.synchronized_feedback.mobility_command_feedback.stand_feedback.status ==
+                            basic_command_pb2.StandCommand.Feedback.STATUS_IS_STANDING):
+                        if hold_arbitrary_pose:
+                            return
+                        self._spot_wrapper._is_standing = True
+                        self._spot_wrapper._last_stand_command = None
+                        self._hold_pose_til = None
+                    else:
+                        self._spot_wrapper._is_standing = False
+                except (ResponseError, RpcError) as e:
+                    self._logger.error("Error when getting robot command feedback: %s", e)
+                    self._spot_wrapper._last_stand_command = None
 
-        if self._spot_wrapper.is_standing and not self._spot_wrapper.is_moving:
+            if self._spot_wrapper._last_sit_command != None:
+                try:
+                    self._spot_wrapper._is_standing = False
+                    response = self._client.robot_command_feedback(self._spot_wrapper._last_sit_command)
+                    if (response.feedback.synchronized_feedback.mobility_command_feedback.sit_feedback.status ==
+                            basic_command_pb2.SitCommand.Feedback.STATUS_IS_SITTING):
+                        self._spot_wrapper._is_sitting = True
+                        self._spot_wrapper._last_sit_command = None
+                    else:
+                        self._spot_wrapper._is_sitting = False
+                except (ResponseError, RpcError) as e:
+                    self._logger.error("Error when getting robot command feedback: %s", e)
+                    self._spot_wrapper._last_sit_command = None
+
+        else: 
+            if self._spot_wrapper._last_trajectory_command != None:
+                try:
+                    response = self._client.robot_command_feedback(self._spot_wrapper._last_trajectory_command)
+                    status = response.feedback.synchronized_feedback.mobility_command_feedback.se2_trajectory_feedback.status
+                    # STATUS_AT_GOAL always means that the robot reached the goal. If the trajectory command did not
+                    # request precise positioning, then STATUS_NEAR_GOAL also counts as reaching the goal
+                    if status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_AT_GOAL or \
+                        (status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_NEAR_GOAL and
+                         not self._spot_wrapper._last_trajectory_command_precise):
+                        self._spot_wrapper._at_goal = True
+                        # Clear the command once at the goal
+                        self._spot_wrapper._last_trajectory_command = None
+                    elif status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_GOING_TO_GOAL:
+                        self._spot_wrapper._is_moving = True
+                    elif status == basic_command_pb2.SE2TrajectoryCommand.Feedback.STATUS_NEAR_GOAL:
+                        self._spot_wrapper._is_moving = True
+                        self._spot_wrapper._near_goal = True
+                    else:
+                        self._spot_wrapper._last_trajectory_command = None
+                except (ResponseError, RpcError) as e:
+                    self._logger.error("Error when getting robot command feedback: %s", e)
+                    self._spot_wrapper._last_trajectory_command = None
+
+        if self._spot_wrapper.is_standing and not self._spot_wrapper._is_moving:
             self._spot_wrapper.stand(False)
 
 class SpotWrapper():
     """Generic wrapper class to encompass release 1.1.4 API features as well as maintaining leases automatically"""
-    def __init__(self, username, password, hostname, logger, estop_timeout=9.0, rates = {}, callbacks = {}):
+    def __init__(self, username, password, hostname, logger, has_arm=False, estop_timeout=9.0, rates = {}, callbacks = {}):
         self._username = username
         self._password = password
         self._hostname = hostname
         self._logger = logger
+        self._has_arm = has_arm
+        self._arm = None # we'll get to this once self._robot is setup
         self._rates = rates
         self._callbacks = callbacks
         self._estop_timeout = estop_timeout
@@ -228,6 +240,7 @@ class SpotWrapper():
         self._last_trajectory_command = None
         self._last_trajectory_command_precise = None
         self._last_velocity_command_time = None
+        self._hold_pose_til = None
 
         self._front_image_requests = []
         for source in front_image_sources:
@@ -269,6 +282,10 @@ class SpotWrapper():
                 self._lease_wallet = self._lease_client.lease_wallet
                 self._image_client = self._robot.ensure_client(ImageClient.default_service_name)
                 self._estop_client = self._robot.ensure_client(EstopClient.default_service_name)
+
+                if self._has_arm:
+                    self._arm = ArmWrapper(self._robot, self, self._logger)
+                #self._nav = graph_nav_command_line.GraphNavInterface(self._robot, self, self._logger)
             except Exception as e:
                 self._logger.error("Unable to create client service: %s", e)
                 self._valid = False
@@ -540,6 +557,34 @@ class SpotWrapper():
             self._last_stand_command = response[2]
         return response[0], response[1]
 
+    def spot_pose(self, euler_x, euler_y, euler_z, timeout_sec=0.0, monitor_command=True):
+        """If the e-stop is enabled, and the motor power is enabled, stand the robot up."""
+        mobility_param = RobotCommandBuilder().mobility_params(footprint_R_body=geometry.EulerZXY(euler_z, euler_x, euler_y))
+        response = self._robot_command(RobotCommandBuilder.synchro_stand_command(params=mobility_param), end_time_secs=timeout_sec)
+        self._hold_pose_til = time.time() + timeout_sec
+        if monitor_command:
+            self._last_stand_command = response[2]
+        return response[0], response[1]
+
+
+#    def spot_pose(self, euler_x, euler_y, euler_z, monitor_command=True):
+#        """Achieve an arbitrary pose. Requires the e-stop and motor power to be enabled."""
+#        #footprint_R_body = geometry.EulerZXY(euler_z, euler_x, euler_y)
+#        timeout_sec = 10.0
+#        end_time = time.time() + timeout_sec
+#        footprint_R_body = geometry.EulerZXY(0.0, 0.0, -1 * math.pi / 6.0)
+#        cmd = RobotCommandBuilder.synchro_stand_command(footprint_R_body=footprint_R_body)
+#        cmd_id = self._robot_command_client.robot_command(lease=self._lease.lease_proto, command=cmd)
+#        while time.time() < end_time:
+#            response = self._robot_command_client.robot_command_feedback(cmd_id)
+#            synchronized_feedback = response.feedback.synchronized_feedback
+#            status = synchronized_feedback.mobility_command_feedback.stand_feedback.status
+#            if (status == basic_command_pb2.StandCommand.Feedback.STATUS_IS_STANDING):
+#                if monitor_command:
+#                    return response[2]
+#                return response[0], response[1]
+#        raise Exception("Failed to pitch robot.")
+
     def safe_power_off(self):
         """Stop the robot's motion and sit if possible.  Once sitting, disable motor power."""
         response = self._robot_command(RobotCommandBuilder.safe_power_off_command())
@@ -663,31 +708,36 @@ class SpotWrapper():
            initial_localization_fiducial : Tells the initializer whether to use fiducials
            initial_localization_waypoint : Waypoint id string of current robot position (optional)
         """
-        # Filepath for uploading a saved graph's and snapshots too.
-        if upload_path[-1] == "/":
-            upload_filepath = upload_path[:-1]
-        else:
-            upload_filepath = upload_path
-
         # Boolean indicating the robot's power state.
         power_state = self._robot_state_client.get_robot_state().power_state
         self._started_powered_on = (power_state.motor_power_state == power_state.STATE_ON)
         self._powered_on = self._started_powered_on
 
-        # FIX ME somehow,,,, if the robot is stand, need to sit the robot before starting garph nav
-        if self.is_standing and not self.is_moving:
-            self.sit()
+#        # FIX ME somehow,,,, if the robot is stand, need to sit the robot before starting garph nav
+#        if self.is_standing and not self.is_moving:
+#            self.sit()
 
         # TODO verify estop  / claim / power_on
-        self._clear_graph()
-        self._upload_graph_and_snapshots(upload_filepath)
+        #self._clear_graph()
+        if len(upload_path) > 0:
+            # Filepath for uploading a saved graph's and snapshots too.
+            if upload_path[-1] == "/":
+                upload_filepath = upload_path[:-1]
+            else:
+                upload_filepath = upload_path
+            rospy.loginfo("Told to upload a new filepath: [{}]".format(upload_filepath))
+            self._upload_graph_and_snapshots(upload_filepath)
         if initial_localization_fiducial:
             self._set_initial_localization_fiducial()
-        if initial_localization_waypoint:
-            self._set_initial_localization_waypoint([initial_localization_waypoint])
-        self._list_graph_waypoint_and_edge_ids()
+        #if initial_localization_waypoint:
+        #    self._set_initial_localization_waypoint([initial_localization_waypoint])
+        #self._list_graph_waypoint_and_edge_ids()
         self._get_localization_state()
-        resp = self._navigate_to([navigate_to])
+        if len(navigate_to) > 0:
+            rospy.loginfo("Told to navigate to: [{}]".format(navigate_to))
+            resp = self._navigate_to(navigate_to)
+        else:
+            resp = [True, 'no goal requested, so success']
 
         return resp
 
@@ -755,42 +805,59 @@ class SpotWrapper():
             graph, localization_id, self._logger)
         return self._current_annotation_name_to_wp_id, self._current_edges
 
-
     def _upload_graph_and_snapshots(self, upload_filepath):
         """Upload the graph and snapshots to the robot."""
-        self._logger.info("Loading the graph from disk into local storage...")
+        print("Loading the graph from disk into local storage...")
         with open(upload_filepath + "/graph", "rb") as graph_file:
             # Load the graph from disk.
             data = graph_file.read()
             self._current_graph = map_pb2.Graph()
             self._current_graph.ParseFromString(data)
-            self._logger.info("Loaded graph has {} waypoints and {} edges".format(
-                len(self._current_graph.waypoints), len(self._current_graph.edges)))
+            print(
+                "Loaded graph has {} waypoints and {} edges".format(
+                    len(self._current_graph.waypoints), len(self._current_graph.edges)
+                )
+            )
         for waypoint in self._current_graph.waypoints:
             # Load the waypoint snapshots from disk.
-            with open(upload_filepath + "/waypoint_snapshots/{}".format(waypoint.snapshot_id),
-                      "rb") as snapshot_file:
+            with open(
+                upload_filepath
+                + "/waypoint_snapshots/{}".format(waypoint.snapshot_id),
+                "rb",
+            ) as snapshot_file:
                 waypoint_snapshot = map_pb2.WaypointSnapshot()
                 waypoint_snapshot.ParseFromString(snapshot_file.read())
-                self._current_waypoint_snapshots[waypoint_snapshot.id] = waypoint_snapshot
+                self._current_waypoint_snapshots[
+                    waypoint_snapshot.id
+                ] = waypoint_snapshot
         for edge in self._current_graph.edges:
+            if len(edge.snapshot_id) == 0:
+                continue
             # Load the edge snapshots from disk.
-            with open(upload_filepath + "/edge_snapshots/{}".format(edge.snapshot_id),
-                      "rb") as snapshot_file:
+            with open(
+                upload_filepath + "/edge_snapshots/{}".format(edge.snapshot_id),
+                "rb",
+            ) as snapshot_file:
                 edge_snapshot = map_pb2.EdgeSnapshot()
                 edge_snapshot.ParseFromString(snapshot_file.read())
                 self._current_edge_snapshots[edge_snapshot.id] = edge_snapshot
         # Upload the graph to the robot.
-        self._logger.info("Uploading the graph and snapshots to the robot...")
-        self._graph_nav_client.upload_graph(lease=self._lease.lease_proto,
-                                            graph=self._current_graph)
+        print("Uploading the graph and snapshots to the robot...")
+        true_if_empty = not len(self._current_graph.anchoring.anchors)
+        response = self._graph_nav_client.upload_graph(
+            lease=self._lease.lease_proto,
+            graph=self._current_graph,
+            generate_new_anchoring=true_if_empty,
+        )
         # Upload the snapshots to the robot.
-        for waypoint_snapshot in self._current_waypoint_snapshots.values():
+        for snapshot_id in response.unknown_waypoint_snapshot_ids:
+            waypoint_snapshot = self._current_waypoint_snapshots[snapshot_id]
             self._graph_nav_client.upload_waypoint_snapshot(waypoint_snapshot)
-            self._logger.info("Uploaded {}".format(waypoint_snapshot.id))
-        for edge_snapshot in self._current_edge_snapshots.values():
+            print("Uploaded {}".format(waypoint_snapshot.id))
+        for snapshot_id in response.unknown_edge_snapshot_ids:
+            edge_snapshot = self._current_edge_snapshots[snapshot_id]
             self._graph_nav_client.upload_edge_snapshot(edge_snapshot)
-            self._logger.info("Uploaded {}".format(edge_snapshot.id))
+            print("Uploaded {}".format(edge_snapshot.id))
 
         # The upload is complete! Check that the robot is localized to the graph,
         # and it if is not, prompt the user to localize the robot before attempting
@@ -798,21 +865,88 @@ class SpotWrapper():
         localization_state = self._graph_nav_client.get_localization_state()
         if not localization_state.localization.waypoint_id:
             # The robot is not localized to the newly uploaded graph.
-            self._logger.info(
-                   "Upload complete! The robot is currently not localized to the map; please localize", \
-                   "the robot using commands (2) or (3) before attempting a navigation command.")
+            print("\n" )
+            print(
+                "Upload complete! The robot is currently not localized to the map; please localize",
+                "the robot using commands (2) or (3) before attempting a navigation command.",
+            )
 
-    def _navigate_to(self, *args):
+        graph = self._graph_nav_client.download_graph()
+        if graph is None:
+            print("Empty graph.")
+            return
+        self._current_graph = graph
+
+        localization_id = (
+            self._graph_nav_client.get_localization_state().localization.waypoint_id
+        )
+
+        # Update and print waypoints and edges
+        (
+            self._current_annotation_name_to_wp_id,
+            self._current_edges,
+        ) = graph_nav_util.update_waypoints_and_edges(graph, localization_id)
+
+#    def _upload_graph_and_snapshots(self, upload_filepath):
+#        """Upload the graph and snapshots to the robot."""
+#        self._logger.info("Loading the graph from disk into local storage...")
+#        with open(upload_filepath + "/graph", "rb") as graph_file:
+#            # Load the graph from disk.
+#            data = graph_file.read()
+#            self._current_graph = map_pb2.Graph()
+#            self._current_graph.ParseFromString(data)
+#            self._logger.info("Loaded graph has {} waypoints and {} edges".format(
+#                len(self._current_graph.waypoints), len(self._current_graph.edges)))
+#        for waypoint in self._current_graph.waypoints:
+#            # Load the waypoint snapshots from disk.
+#            with open(upload_filepath + "/waypoint_snapshots/{}".format(waypoint.snapshot_id),
+#                      "rb") as snapshot_file:
+#                waypoint_snapshot = map_pb2.WaypointSnapshot()
+#                waypoint_snapshot.ParseFromString(snapshot_file.read())
+#                self._current_waypoint_snapshots[waypoint_snapshot.id] = waypoint_snapshot
+#        for edge in self._current_graph.edges:
+#            # Load the edge snapshots from disk.
+#            try:
+#                with open(upload_filepath + "/edge_snapshots/{}".format(edge.snapshot_id),
+#                          "rb") as snapshot_file:
+#                    edge_snapshot = map_pb2.EdgeSnapshot()
+#                    edge_snapshot.ParseFromString(snapshot_file.read())
+#                    self._current_edge_snapshots[edge_snapshot.id] = edge_snapshot
+#            except Exception as e:
+#                rospy.logwarn("Error uploading edge {}: {}".format(edge.snapshot_id, e))
+#        # Upload the graph to the robot.
+#        self._logger.info("Uploading the graph and snapshots to the robot...")
+#        assert self._lease is not None, "Lease does not currently exist."
+#        assert self._lease.lease_proto is not None, "You do not currently hold the lease."
+#        self._graph_nav_client.upload_graph(lease=self._lease.lease_proto,
+#                                            graph=self._current_graph)
+#        # Upload the snapshots to the robot.
+#        for waypoint_snapshot in self._current_waypoint_snapshots.values():
+#            self._graph_nav_client.upload_waypoint_snapshot(waypoint_snapshot)
+#            self._logger.info("Uploaded {}".format(waypoint_snapshot.id))
+#        for edge_snapshot in self._current_edge_snapshots.values():
+#            self._graph_nav_client.upload_edge_snapshot(edge_snapshot)
+#            self._logger.info("Uploaded {}".format(edge_snapshot.id))
+#
+#        # The upload is complete! Check that the robot is localized to the graph,
+#        # and it if is not, prompt the user to localize the robot before attempting
+#        # any navigation commands.
+#        localization_state = self._graph_nav_client.get_localization_state()
+#        if not localization_state.localization.waypoint_id:
+#            # The robot is not localized to the newly uploaded graph.
+#            self._logger.info("Upload complete! The robot is currently not localized to the map; please localize the robot using commands (2) or (3) before attempting a navigation command.")
+
+    def _navigate_to(self, goal):
         """Navigate to a specific waypoint."""
         # Take the first argument as the destination waypoint.
-        if len(args) < 1:
-            # If no waypoint id is given as input, then return without requesting navigation.
-            self._logger.info("No waypoint provided as a destination for navigate to.")
-            return
+        #if len(args) < 1:
+        #    # If no waypoint id is given as input, then return without requesting navigation.
+        #    self._logger.info("No waypoint provided as a destination for navigate to.")
+        #    return
 
         self._lease = self._lease_wallet.get_lease()
         destination_waypoint = graph_nav_util.find_unique_waypoint_id(
-            args[0][0], self._current_graph, self._current_annotation_name_to_wp_id, self._logger)
+            goal, self._current_graph, self._current_annotation_name_to_wp_id)
         if not destination_waypoint:
             # Failed to find the appropriate unique waypoint id for the navigation command.
             return
@@ -867,7 +1001,7 @@ class SpotWrapper():
         waypoint_ids = args[0]
         for i in range(len(waypoint_ids)):
             waypoint_ids[i] = graph_nav_util.find_unique_waypoint_id(
-                waypoint_ids[i], self._current_graph, self._current_annotation_name_to_wp_id, self._logger)
+                waypoint_ids[i], self._current_graph, self._current_annotation_name_to_wp_id)
             if not waypoint_ids[i]:
                 # Failed to find the unique waypoint id.
                 return
@@ -922,9 +1056,9 @@ class SpotWrapper():
                 # Sit the robot down + power off after the navigation command is complete.
                 self.toggle_power(should_power_on=False)
 
-    def _clear_graph(self, *args):
-        """Clear the state of the map on the robot, removing all waypoints and edges."""
-        return self._graph_nav_client.clear_graph(lease=self._lease.lease_proto)
+#    def _clear_graph(self, *args):
+#        """Clear the state of the map on the robot, removing all waypoints and edges."""
+#        return self._graph_nav_client.clear_graph(lease=self._lease.lease_proto)
 
     def toggle_power(self, should_power_on):
         """Power the robot on/off dependent on the current power state."""
