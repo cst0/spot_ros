@@ -1,9 +1,8 @@
 import rospy
+import math
 
 from std_srvs.srv import Trigger, TriggerResponse, SetBool, SetBoolResponse
-from std_msgs.msg import Bool
 from tf2_msgs.msg import TFMessage
-from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import Image, CameraInfo
 from sensor_msgs.msg import JointState
 from geometry_msgs.msg import TwistWithCovarianceStamped, Twist, Pose
@@ -15,18 +14,17 @@ from bosdyn.api.geometry_pb2 import Quaternion, SE2VelocityLimit
 from bosdyn.client import math_helpers
 import actionlib
 import functools
-import bosdyn.geometry
 import tf2_ros
 
 from spot_msgs.msg import Metrics
 from spot_msgs.msg import LeaseArray, LeaseResource
-from spot_msgs.msg import FootState, FootStateArray
-from spot_msgs.msg import EStopState, EStopStateArray
+from spot_msgs.msg import FootStateArray
+from spot_msgs.msg import EStopStateArray
 from spot_msgs.msg import WiFiState
 from spot_msgs.msg import PowerState
-from spot_msgs.msg import BehaviorFault, BehaviorFaultState
-from spot_msgs.msg import SystemFault, SystemFaultState
-from spot_msgs.msg import BatteryState, BatteryStateArray
+from spot_msgs.msg import BehaviorFaultState
+from spot_msgs.msg import SystemFaultState
+from spot_msgs.msg import BatteryStateArray
 from spot_msgs.msg import Feedback
 from spot_msgs.msg import MobilityParams
 from spot_msgs.msg import NavigateToAction, NavigateToResult, NavigateToFeedback
@@ -35,6 +33,7 @@ from spot_msgs.srv import ListGraph, ListGraphResponse
 from spot_msgs.srv import SetLocomotion, SetLocomotionResponse
 from spot_msgs.srv import ClearBehaviorFault, ClearBehaviorFaultResponse
 from spot_msgs.srv import SetVelocity, SetVelocityResponse
+from spot_msgs.srv import SpotPose, SpotPoseRequest, SpotPoseResponse
 
 from .ros_helpers import *
 from .spot_wrapper import SpotWrapper
@@ -47,8 +46,6 @@ class SpotROS():
     """Parent class for using the wrapper.  Defines all callbacks and keeps the wrapper alive"""
 
     def __init__(self):
-        self.spot_wrapper = None
-
         self.callbacks = {}
         """Dictionary listing what callback to use for what data task"""
         self.callbacks["robot_state"] = self.RobotStateCB
@@ -73,7 +70,7 @@ class SpotROS():
 
             ## TF ##
             tf_msg = GetTFFromState(state, self.spot_wrapper, self.mode_parent_odom_tf)
-            if len(tf_msg.transforms) > 0:
+            if tf_msg.transforms is not None and len(tf_msg.transforms) > 0:
                 self.tf_pub.publish(tf_msg)
 
             # Odom Twist #
@@ -300,6 +297,44 @@ class SpotROS():
         resp = self.spot_wrapper.clear_behavior_fault(req.id)
         return ClearBehaviorFaultResponse(resp[0], resp[1])
 
+    def handle_spot_pose(self, req:SpotPoseRequest):
+        pose = {
+            "euler_x" : 0.0,
+            "euler_y" : 0.0,
+            "euler_z" : 0.0
+        }
+        if req.pose_type == req.CUSTOM:
+            pose['euler_x'] = req.euler_x
+            pose['euler_y'] = req.euler_y
+            pose['euler_z'] = req.euler_z
+        if req.pose_type == req.LOOK_UP:
+            pose['euler_x'] = 0
+            pose['euler_y'] = -1 * math.pi / 6.0
+            pose['euler_z'] = 0
+        if req.pose_type == req.SIT:
+            resp = self.handle_sit(None)
+            return SpotPoseResponse(resp.success, resp.message)
+        if req.pose_type == req.STAND:
+            resp = self.handle_stand(None)
+            return SpotPoseResponse(resp.success, resp.message)
+
+        timeout = 0
+        if req.pose_hold_time >= 0:
+            timeout = req.pose_hold_time
+        else:
+            if req.pose_hold_time == req.POSE_HOLD_TIME_INF:
+                timeout = -1  # anything negative will mean hold
+            if req.pose_hold_time == req.POSE_HOLD_TIME_DEFAULT:
+                timeout = 10  # TODO: parmeterize --cst
+
+        # TODO: parameterize, support height param, timeout, other poses --cst
+        try:
+            rospy.loginfo("Told to achieve pose {} for {}".format(pose, timeout))
+            self.spot_wrapper.spot_pose(pose['euler_x'], pose['euler_y'], pose['euler_z'], timeout_sec=timeout)
+            return SpotPoseResponse(True, 'Success')
+        except Exception as e:
+            return SpotPoseResponse(False, 'Error:{}'.format(e))
+
     def handle_stair_mode(self, req):
         """ROS service handler to set a stair mode to the robot."""
         try:
@@ -500,6 +535,7 @@ class SpotROS():
         self.username = rospy.get_param('~username', 'default_value')
         self.password = rospy.get_param('~password', 'default_value')
         self.hostname = rospy.get_param('~hostname', 'default_value')
+        self.has_arm  = rospy.get_param('~has_arm', False)
         self.motion_deadzone = rospy.get_param('~deadzone', 0.05)
         self.estop_timeout = rospy.get_param('~estop_timeout', 9.0)
 
@@ -525,7 +561,7 @@ class SpotROS():
         self.logger = logging.getLogger('rosout')
 
         rospy.loginfo("Starting ROS driver for Spot at "+str(self.hostname)+" as "+str(self.username)+" "+str(self.password))
-        self.spot_wrapper = SpotWrapper(self.username, self.password, self.hostname, self.logger, self.estop_timeout, self.rates, self.callbacks)
+        self.spot_wrapper = SpotWrapper(self.username, self.password, self.hostname, self.logger, self.has_arm, self.estop_timeout, self.rates, self.callbacks)
 
         if self.spot_wrapper.is_valid:
             # Images #
@@ -591,6 +627,7 @@ class SpotROS():
             rospy.Service("estop/gentle", Trigger, self.handle_estop_soft)
             rospy.Service("estop/release", Trigger, self.handle_estop_disengage)
 
+            rospy.Service("spot_pose", SpotPose, self.handle_spot_pose)
             rospy.Service("stair_mode", SetBool, self.handle_stair_mode)
             rospy.Service("locomotion_mode", SetLocomotion, self.handle_locomotion_mode)
             rospy.Service("max_velocity", SetVelocity, self.handle_max_vel)
