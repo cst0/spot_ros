@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from spot_driver.arm.grasp_provider import GraspProvider
+
+if __name__ == "__main__":
+    SR = GraspProvider()
+    SR.main()
