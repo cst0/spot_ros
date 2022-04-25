@@ -1,0 +1,25 @@
+# Action definition to manage opening a door.
+# With this action, the Spot should
+# 1) tilt up to bring the door handle in view
+# 2) query an external service to get the location of the door handle
+# 3) use that information to grab the handle, turn it, and step through.
+
+# no information needed to start the sequence (though we will need the location of a door handle later)
+---
+# did the door opening succeed?
+bool success
+
+# if not, maybe we can provide som insight on that?
+uint8 FAILED_NO_ARM=1
+uint8 FAILED_NO_GRASP=2
+uint8 FAILED_COULD_NOT_OPEN=3
+uint8 failure_reason
+---
+uint8 LOOKING=1            # Moved to a position where the handle should be visible.
+uint8 WAITING_FOR_HANDLE=2 # Waiting for some external service to tell us where the handle is.
+uint8 GRASPING=3           # Grabbing the handle at the provided point.
+uint8 OPENING=4            # Opening the door using a grasp.
+uint8 STEPPING=5           # Stepping through the doorway now that the door is open.
+uint8 RECOVERING=6         # there was some failure that we're now dealing with or attempting to fail gracefully.
+
+uint8 current_step

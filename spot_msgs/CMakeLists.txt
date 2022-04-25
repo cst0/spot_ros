@@ -36,15 +36,18 @@ add_message_files(
 
 add_service_files(
   FILES
+  ClearBehaviorFault.srv
   ListGraph.srv
+  OpenDoor.srv
   SetLocomotion.srv
   SetVelocity.srv
-  ClearBehaviorFault.srv
+  SpotPose.srv
 )
 
 add_action_files(
   FILES
   NavigateTo.action
+  OpenDoor.action
   Trajectory.action
 )
 

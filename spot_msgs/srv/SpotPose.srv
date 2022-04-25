@@ -1,0 +1,28 @@
+# Control arbitrary poses for the spot. In this context, "Pose" does not mean
+# "being at a point in space" (e.g., PoseStamped msgs) Instead, it's things
+# like sitting, standing, looking up, etc.
+
+# What type of pose do you want to set?
+uint8 pose_type
+
+# Here's some reasonable default poses
+uint8 STAND=1      # Already implemented by /spot/stand, but since we're constructing a pose srv...
+uint8 SIT=2        # Already implemented by /spot/sit, but since we're constructing a pose srv...
+uint8 LOOK_UP=3    # Tilt torso upwards, such as to look at a door handle
+uint8 LOOK_DOWN=4  # Tilt torso downwards, such as to look at an object on the ground for grasping
+uint8 HEAD_TILT=5  # Expressive 'head tilt' to the right (like a confused dog)
+
+uint8 CUSTOM=6     # or just let the user specify their own euler angles.
+float64 euler_z
+float64 euler_x
+float64 euler_y
+
+# How long do you want to hold that pose for? (in seconds.)
+float64 pose_hold_time
+
+# If you don't have a specific time in mind, here's some options
+float64 POSE_HOLD_TIME_DEFAULT=-1.0 # hold it for some reasonable default time
+float64 POSE_HOLD_TIME_INF=-2.0     # hold it until told to do some other pose
+---
+bool success
+string message
