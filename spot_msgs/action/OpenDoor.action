@@ -9,7 +9,7 @@
 # did the door opening succeed?
 bool success
 
-# if not, maybe we can provide som insight on that?
+# if not, maybe we can provide some insight on that?
 uint8 FAILED_NO_ARM=1
 uint8 FAILED_NO_GRASP=2
 uint8 FAILED_COULD_NOT_OPEN=3
