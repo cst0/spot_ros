@@ -1,4 +1,24 @@
-uint32 locomotion_mode # See https://dev.bostondynamics.com/protos/bosdyn/api/proto_reference.html?highlight=mobilityparams#locomotionhint for details
+uint8  HINT_UNKNOWN             = 0   # Invalid; do not use.
+uint8  HINT_AUTO                = 1   # No hint, robot chooses an appropriate gait (typically trot.)
+uint8  HINT_TROT                = 2   # Most robust gait which moves diagonal legs together.
+uint8  HINT_SPEED_SELECT_TROT   = 3   # Trot which comes to a stand when not commanded to move.
+uint8  HINT_CRAWL               = 4   # Slow and steady gait which moves only one foot at a time.
+uint8  HINT_SPEED_SELECT_CRAWL  = 10  # Crawl which comes to a stand when not commanded to move.
+uint8  HINT_AMBLE               = 5   # Four beat gait where one foot touches down at a time.
+uint8  HINT_SPEED_SELECT_AMBLE  = 6   # Amble which comes to a stand when not commanded to move.
+uint8  HINT_JOG                 = 7   # Demo gait which moves diagonal leg pairs together with an aerial phase.
+uint8  HINT_HOP                 = 8   # Demo gait which hops while holding some feet in the air.
+uint8  HINT_AUTO_TROT           = 3   # HINT_AUTO_TROT is deprecated due to the
+                                      # name being too similar to the Spot Autowalk feature. It has been replaced by
+                                      # HINT_SPEED_SELECT_TROT. Keeping this value in here for now for backwards
+                                      # compatibility, but this may be removed in future releases.
+
+# See
+# https://dev.bostondynamics.com/protos/bosdyn/api/proto_reference.html?highlight=mobilityparams#locomotionhint
+# for details:
+
+
+uint32 locomotion_mode 
 ---
 bool success
 string message

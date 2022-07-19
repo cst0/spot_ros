@@ -17,6 +17,8 @@ float64 euler_z
 float64 euler_x
 float64 euler_y
 
+float64 height
+
 # How long do you want to hold that pose for? (in seconds.)
 float64 pose_hold_time
 
