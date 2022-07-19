@@ -2,8 +2,9 @@
   <arg name="username" default="dummyusername" />
   <arg name="password" default="dummypassword" />
   <arg name="hostname" default="192.168.50.3" />
-  <arg name="has_arm" default="false"/>
   <arg name="estop_timeout" default="9.0"/>
+  <arg name="has_arm" default="false" unless="$(eval optenv('HAS_ARM', 1))"/>
+  <arg name="has_arm" value="true" if="$(eval optenv('HAS_ARM', 1))"/>
 
   <include file="$(find spot_description)/launch/description.launch" />
   <include file="$(find spot_driver)/launch/control.launch" />

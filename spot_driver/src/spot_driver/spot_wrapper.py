@@ -155,7 +155,7 @@ class AsyncIdle(AsyncPeriodicQuery):
         if not self._spot_wrapper._is_moving:
             if self._spot_wrapper._last_stand_command != None:
                 hold_arbitrary_pose = False
-                if self._spot_wrapper._hold_pose_til is not None and time.time() < self._spot_wrapper._hold_pose_til:
+                if self._spot_wrapper._hold_pose_inf or (self._spot_wrapper._hold_pose_til is not None and time.time() < self._spot_wrapper._hold_pose_til):
                     hold_arbitrary_pose = True
                 try:
                     response = self._client.robot_command_feedback(self._spot_wrapper._last_stand_command)
@@ -241,6 +241,7 @@ class SpotWrapper():
         self._last_trajectory_command_precise = None
         self._last_velocity_command_time = None
         self._hold_pose_til = None
+        self._hold_pose_inf = False
 
         self._front_image_requests = []
         for source in front_image_sources:
@@ -562,6 +563,7 @@ class SpotWrapper():
         mobility_param = RobotCommandBuilder().mobility_params(footprint_R_body=geometry.EulerZXY(euler_z, euler_x, euler_y))
         response = self._robot_command(RobotCommandBuilder.synchro_stand_command(params=mobility_param), end_time_secs=timeout_sec)
         self._hold_pose_til = time.time() + timeout_sec
+        self._hold_pose_inf = True if timeout_sec < 0 else False
         if monitor_command:
             self._last_stand_command = response[2]
         return response[0], response[1]

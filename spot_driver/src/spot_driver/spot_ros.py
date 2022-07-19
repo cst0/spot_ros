@@ -1,3 +1,4 @@
+from numpy import append
 import rospy
 import math
 
@@ -61,6 +62,7 @@ class SpotROS():
         Args:
             results: FutureWrapper object of AsyncPeriodicQuery callback
         """
+        del results
         state = self.spot_wrapper.robot_state
 
         if state:
@@ -118,6 +120,7 @@ class SpotROS():
         Args:
             results: FutureWrapper object of AsyncPeriodicQuery callback
         """
+        del results
         metrics = self.spot_wrapper.metrics
         if metrics:
             metrics_msg = Metrics()
@@ -130,9 +133,9 @@ class SpotROS():
                 if metric.label == "gait cycles":
                     metrics_msg.gait_cycles = metric.int_value
                 if metric.label == "time moving":
-                    metrics_msg.time_moving = rospy.Time(metric.duration.seconds, metric.duration.nanos)
+                    metrics_msg.time_moving = rospy.Duration(metric.duration.seconds, metric.duration.nanos)
                 if metric.label == "electric power":
-                    metrics_msg.electric_power = rospy.Time(metric.duration.seconds, metric.duration.nanos)
+                    metrics_msg.electric_power = rospy.Duration(metric.duration.seconds, metric.duration.nanos)
 
             self.metrics_pub.publish(metrics_msg)
 
@@ -142,6 +145,7 @@ class SpotROS():
         Args:
             results: FutureWrapper object of AsyncPeriodicQuery callback
         """
+        del results
         lease_array_msg = LeaseArray()
         lease_list = self.spot_wrapper.lease
         if lease_list:
@@ -152,12 +156,14 @@ class SpotROS():
                 new_resource.lease.epoch = resource.lease.epoch
 
                 for seq in resource.lease.sequence:
-                    new_resource.lease.sequence.append(seq)
+                    assert type(new_resource.lease.sequence) == list
+                    new_resource.lease.sequence.append(seq) # type: ignore
 
                 new_resource.lease_owner.client_name = resource.lease_owner.client_name
                 new_resource.lease_owner.user_name = resource.lease_owner.user_name
 
-                lease_array_msg.resources.append(new_resource)
+                assert type(lease_array_msg.resources) == list
+                lease_array_msg.resources.append(new_resource) # type: ignore
 
             self.lease_pub.publish(lease_array_msg)
 
@@ -167,6 +173,7 @@ class SpotROS():
         Args:
             results: FutureWrapper object of AsyncPeriodicQuery callback
         """
+        del results
         data = self.spot_wrapper.front_images
         if data:
             image_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
@@ -193,6 +200,7 @@ class SpotROS():
         Args:
             results: FutureWrapper object of AsyncPeriodicQuery callback
         """
+        del results
         data = self.spot_wrapper.side_images
         if data:
             image_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
@@ -219,6 +227,7 @@ class SpotROS():
         Args:
             results: FutureWrapper object of AsyncPeriodicQuery callback
         """
+        del results
         data = self.spot_wrapper.rear_images
         if data:
             mage_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
@@ -233,62 +242,74 @@ class SpotROS():
 
     def handle_claim(self, req):
         """ROS service handler for the claim service"""
+        del req
         resp = self.spot_wrapper.claim()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_force_claim(self, req):
         """ROS service handler for the forceful variant of claim service"""
+        del req
         resp = self.spot_wrapper.force_claim()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_release(self, req):
         """ROS service handler for the release service"""
+        del req
         resp = self.spot_wrapper.release()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_stop(self, req):
         """ROS service handler for the stop service"""
+        del req
         resp = self.spot_wrapper.stop()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_self_right(self, req):
         """ROS service handler for the self-right service"""
+        del req
         resp = self.spot_wrapper.self_right()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_sit(self, req):
         """ROS service handler for the sit service"""
+        del req
         resp = self.spot_wrapper.sit()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_stand(self, req):
         """ROS service handler for the stand service"""
+        del req
         resp = self.spot_wrapper.stand()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_power_on(self, req):
         """ROS service handler for the power-on service"""
+        del req
         resp = self.spot_wrapper.power_on()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_safe_power_off(self, req):
         """ROS service handler for the safe-power-off service"""
+        del req
         resp = self.spot_wrapper.safe_power_off()
         return TriggerResponse(resp[0], resp[1])
 
     def handle_estop_hard(self, req):
         """ROS service handler to hard-eStop the robot.  The robot will immediately cut power to the motors"""
+        del req
         resp = self.spot_wrapper.assertEStop(True)
         return TriggerResponse(resp[0], resp[1])
 
     def handle_estop_soft(self, req):
         """ROS service handler to soft-eStop the robot.  The robot will try to settle on the ground before cutting
         power to the motors """
+        del req
         resp = self.spot_wrapper.assertEStop(False)
         return TriggerResponse(resp[0], resp[1])
 
     def handle_estop_disengage(self, req):
         """ROS service handler to disengage the eStop on the robot."""
+        del req
         resp = self.spot_wrapper.disengageEStop()
         return TriggerResponse(resp[0], resp[1])
 
@@ -310,6 +331,14 @@ class SpotROS():
         if req.pose_type == req.LOOK_UP:
             pose['euler_x'] = 0
             pose['euler_y'] = -1 * math.pi / 6.0
+            pose['euler_z'] = 0
+        if req.pose_type == req.LOOK_DOWN:
+            pose['euler_x'] = 0
+            pose['euler_y'] = math.pi / 6.0
+            pose['euler_z'] = 0
+        if req.pose_type == req.HEAD_TILT:
+            pose['euler_x'] = math.pi / 6.0
+            pose['euler_y'] = 0
             pose['euler_z'] = 0
         if req.pose_type == req.SIT:
             resp = self.handle_sit(None)
@@ -560,7 +589,7 @@ class SpotROS():
 
         self.logger = logging.getLogger('rosout')
 
-        rospy.loginfo("Starting ROS driver for Spot at "+str(self.hostname)+" as "+str(self.username)+" "+str(self.password))
+        rospy.loginfo("Starting ROS driver for Spot at "+str(self.hostname)+" as "+str(self.username)+" "+str(self.password)+("" if not self.has_arm else " (has arm)"))
         self.spot_wrapper = SpotWrapper(self.username, self.password, self.hostname, self.logger, self.has_arm, self.estop_timeout, self.rates, self.callbacks)
 
         if self.spot_wrapper.is_valid:
