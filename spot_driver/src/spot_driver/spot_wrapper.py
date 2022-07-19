@@ -14,6 +14,7 @@ from bosdyn.client.frame_helpers import get_odom_tform_body
 from bosdyn.client.power import safe_power_off, PowerClient, power_on
 from bosdyn.client.lease import LeaseClient, LeaseKeepAlive
 from bosdyn.client.image import ImageClient, build_image_request
+from bosdyn.client.docking import DockingClient, blocking_dock_robot, blocking_undock
 from bosdyn.api import image_pb2
 from bosdyn.api.graph_nav import graph_nav_pb2
 from bosdyn.api.graph_nav import map_pb2
@@ -22,6 +23,7 @@ from bosdyn.client.estop import EstopClient, EstopEndpoint, EstopKeepAlive
 from bosdyn.client import power
 from bosdyn.client import frame_helpers
 from bosdyn.client import math_helpers
+from bosdyn.client import robot_command
 from bosdyn.client.exceptions import InternalServerError
 
 from spot_driver.arm.arm_wrapper import ArmWrapper
@@ -187,7 +189,7 @@ class AsyncIdle(AsyncPeriodicQuery):
                     self._logger.error("Error when getting robot command feedback: %s", e)
                     self._spot_wrapper._last_sit_command = None
 
-        else: 
+        else:
             if self._spot_wrapper._last_trajectory_command != None:
                 try:
                     response = self._client.robot_command_feedback(self._spot_wrapper._last_trajectory_command)
@@ -211,7 +213,12 @@ class AsyncIdle(AsyncPeriodicQuery):
                     self._logger.error("Error when getting robot command feedback: %s", e)
                     self._spot_wrapper._last_trajectory_command = None
 
-        if self._spot_wrapper.is_standing and not self._spot_wrapper._is_moving:
+        #if self._spot_wrapper.is_standing and not self._spot_wrapper._is_moving:
+        if (self._spot_wrapper.is_standing and not self._spot_wrapper.is_moving
+                    and self._spot_wrapper._last_trajectory_command is not None
+                    and self._spot_wrapper._last_stand_command is not None
+                    and self._spot_wrapper._last_velocity_command_time is not None
+                    and self._spot_wrapper._last_docking_command is not None):
             self._spot_wrapper.stand(False)
 
 class SpotWrapper():
@@ -242,6 +249,7 @@ class SpotWrapper():
         self._last_velocity_command_time = None
         self._hold_pose_til = None
         self._hold_pose_inf = False
+        self._last_docking_command = None
 
         self._front_image_requests = []
         for source in front_image_sources:
@@ -287,6 +295,7 @@ class SpotWrapper():
                 if self._has_arm:
                     self._arm = ArmWrapper(self._robot, self, self._logger)
                 #self._nav = graph_nav_command_line.GraphNavInterface(self._robot, self, self._logger)
+                self._docking_client = self._robot.ensure_client(DockingClient.default_service_name)
             except Exception as e:
                 self._logger.error("Unable to create client service: %s", e)
                 self._valid = False
@@ -1128,3 +1137,33 @@ class SpotWrapper():
                     # This edge matches the pair of waypoints! Add it the edge list and continue.
                     return map_pb2.Edge.Id(from_waypoint=waypoint1, to_waypoint=waypoint2)
         return None
+
+    def dock(self, dock_id):
+        """Dock the robot to the docking station with fiducial ID [dock_id]."""
+        try:
+            # Make sure we're powered on and standing
+            self._robot.power_on()
+            self.stand()
+            # Dock the robot
+            self.last_docking_command = dock_id
+            blocking_dock_robot(self._robot, dock_id)
+            self.last_docking_command = None
+            return True, "Success"
+        except Exception as e:
+            return False, str(e)
+
+    def undock(self, timeout=20):
+        """Power motors on and undock the robot from the station."""
+        try:
+            # Maker sure we're powered on
+            self._robot.power_on()
+            # Undock the robot
+            blocking_undock(self._robot ,timeout)
+            return True, "Success"
+        except Exception as e:
+            return False, str(e)
+
+    def get_docking_state(self, **kwargs):
+        """Get docking state of robot."""
+        state = self._docking_client.get_docking_state(**kwargs)
+        return state

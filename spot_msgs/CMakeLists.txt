@@ -32,6 +32,7 @@ add_message_files(
   LeaseResource.msg
   PowerState.msg
   SystemFaultState.msg
+  DockState.msg
 )
 
 add_service_files(
@@ -42,6 +43,9 @@ add_service_files(
   SetLocomotion.srv
   SetVelocity.srv
   SpotPose.srv
+  ClearBehaviorFault.srv
+  Dock.srv
+  GetDockState.srv
 )
 
 add_action_files(

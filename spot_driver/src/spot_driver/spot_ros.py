@@ -35,6 +35,7 @@ from spot_msgs.srv import SetLocomotion, SetLocomotionResponse
 from spot_msgs.srv import ClearBehaviorFault, ClearBehaviorFaultResponse
 from spot_msgs.srv import SetVelocity, SetVelocityResponse
 from spot_msgs.srv import SpotPose, SpotPoseRequest, SpotPoseResponse
+from spot_msgs.srv import Dock, DockResponse, GetDockState, GetDockStateResponse
 
 from .ros_helpers import *
 from .spot_wrapper import SpotWrapper
@@ -465,6 +466,21 @@ class SpotROS():
                 self.trajectory_server.publish_feedback(TrajectoryFeedback("Failed to reach goal"))
                 self.trajectory_server.set_aborted(TrajectoryResult(False, "Failed to reach goal"))
 
+    def handle_dock(self, req):
+        """Dock the robot"""
+        resp = self.spot_wrapper.dock(req.dock_id)
+        return DockResponse(resp[0], resp[1])
+
+    def handle_undock(self, req):
+        """Undock the robot"""
+        resp = self.spot_wrapper.undock()
+        return TriggerResponse(resp[0], resp[1])
+
+    def handle_get_docking_state(self, req):
+        """Get docking state of robot"""
+        resp = self.spot_wrapper.get_docking_state()
+        return GetDockStateResponse(GetDockStatesFromState(resp))
+
     def cmdVelCallback(self, data):
         """Callback for cmd_vel command"""
         self.spot_wrapper.velocity_cmd(data.linear.x, data.linear.y, data.angular.z)
@@ -663,6 +679,11 @@ class SpotROS():
             rospy.Service("clear_behavior_fault", ClearBehaviorFault, self.handle_clear_behavior_fault)
 
             rospy.Service("list_graph", ListGraph, self.handle_list_graph)
+
+            # Docking
+            rospy.Service("dock", Dock, self.handle_dock)
+            rospy.Service("undock", Trigger, self.handle_undock)
+            rospy.Service("docking_state", GetDockState, self.handle_get_docking_state)
 
             self.navigate_as = actionlib.SimpleActionServer('navigate_to', NavigateToAction,
                                                             execute_cb = self.handle_navigate_to,
