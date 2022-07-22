@@ -34,12 +34,15 @@ import bosdyn.api.robot_state_pb2
 from bosdyn.api import basic_command_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
-front_image_sources = ['frontleft_fisheye_image', 'frontright_fisheye_image', 'frontleft_depth', 'frontright_depth']
 """List of image sources for front image periodic query"""
-side_image_sources = ['left_fisheye_image', 'right_fisheye_image', 'left_depth', 'right_depth']
+front_image_sources = ['frontleft_fisheye_image', 'frontright_fisheye_image', 'frontleft_depth', 'frontright_depth']
 """List of image sources for side image periodic query"""
-rear_image_sources = ['back_fisheye_image', 'back_depth']
+side_image_sources = ['left_fisheye_image', 'right_fisheye_image', 'left_depth', 'right_depth']
 """List of image sources for rear image periodic query"""
+rear_image_sources = ['back_fisheye_image', 'back_depth']
+"""List of image sources for gripper image periodic query"""
+gripper_image_source = ['gripper_color_camera_z_forward']
+
 
 class AsyncRobotState(AsyncPeriodicQuery):
     """Class to get robot state at regular intervals.  get_robot_state_async query sent to the robot at every tick.  Callback registered to defined callback function.

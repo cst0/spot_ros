@@ -4,6 +4,7 @@ import actionlib
 from std_srvs.srv import Trigger
 from spot_msgs.msg import OpenDoorAction
 from spot_msgs.srv import OpenDoor
+from vision_msgs.msg import Detection2D
 from spot_driver.arm.arm_utilities.door_opener import open_door_main
 
 from bosdyn.client.manipulation_api_client import ManipulationApiClient
@@ -25,6 +26,9 @@ class ArmWrapper:
             self.handle_open_door,
         )
 
+        self.door_detection_service_proxy = None
+        #self.door_detection_service_proxy = rospy.ServiceProxy("door_detection_service", Detection2D)
+
         self._init_bosdyn_clients()
         self._init_actionservers()
 
@@ -45,4 +49,4 @@ class ArmWrapper:
     def handle_open_door(self, goal):
         del goal
         rospy.loginfo("Got a open door request")
-        open_door_main(self._robot, self._spot_wrapper)
+        open_door_main(self._robot, self._spot_wrapper, self.door_detection_service_proxy)

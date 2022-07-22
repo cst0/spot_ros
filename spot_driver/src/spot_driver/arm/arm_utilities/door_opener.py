@@ -11,9 +11,6 @@ import math
 import time
 import rospy
 
-from spot_msgs.srv import SpotPoseRequest
-
-from bosdyn import geometry
 from bosdyn.api import manipulation_api_pb2
 from bosdyn.api import basic_command_pb2
 from bosdyn.api import geometry_pb2
@@ -32,74 +29,16 @@ import cv2
 import numpy as np
 
 
-#def power_on(robot):
-#    """Power on robot.
-#
-#    Args:
-#        robot: (Robot) Interface to Spot robot.
-#    """
-#    rospy.loginfo("Powering on robot...")
-#    robot.power_on(timeout_sec=20)
-#    assert robot.is_powered_on(), "Robot power on failed."
-#    rospy.loginfo("Robot powered on.")
-#
-#
-#def safe_power_off(robot):
-#    """Sit and power off robot.
-#
-#    Args:
-#        robot: (Robot) Interface to Spot robot.
-#    """
-#    rospy.loginfo("Powering off robot...")
-#    robot.power_off(cut_immediately=False, timeout_sec=20)
-#    assert not robot.is_powered_on(), "Robot power off failed."
-#    rospy.loginfo("Robot safely powered off.")
-#
-#
-#def stand(robot):
-#    """Stand robot.
-#
-#    Args:
-#        robot: (Robot) Interface to Spot robot.
-#    """
-#    rospy.loginfo("Commanding robot to stand...")
-#    command_client = robot.ensure_client(RobotCommandClient.default_service_name)
-#    blocking_stand(command_client, timeout_sec=10)
-#    rospy.loginfo("Robot standing.")
-
-
-#def pitch_up(robot):
-#    """Pitch robot up to look for door handle.
-#
-#    Args:
-#        robot: (Robot) Interface to Spot robot.
-#    """
-#    rospy.loginfo("Pitching robot up...")
-#    command_client = robot.ensure_client(RobotCommandClient.default_service_name)
-#    footprint_R_body = geometry.EulerZXY(0.0, 0.0, -1 * math.pi / 6.0)
-#    cmd = RobotCommandBuilder.synchro_stand_command(footprint_R_body=footprint_R_body)
-#    cmd_id = command_client.robot_command(cmd)
-#    timeout_sec = 10.0
-#    end_time = time.time() + timeout_sec
-#    while time.time() < end_time:
-#        response = command_client.robot_command_feedback(cmd_id)
-#        synchronized_feedback = response.feedback.synchronized_feedback
-#        status = synchronized_feedback.mobility_command_feedback.stand_feedback.status
-#        if (status == basic_command_pb2.StandCommand.Feedback.STATUS_IS_STANDING):
-#            rospy.loginfo("Robot pitched.")
-#            return
-#        time.sleep(1.0)
-#    raise Exception("Failed to pitch robot.")
-
-
 def check_estop(robot):
     """Verify that robot is not estopped. E-Stop should be run in a separate process.
 
     Args:
         robot: (Robot) Interface to Spot robot.
     """
-    assert not robot.is_estopped(), "Robot is estopped. Please use an external E-Stop client, " \
-                                    "such as the estop SDK example, to configure E-Stop."
+    assert not robot.is_estopped(), (
+        "Robot is estopped. Please use an external E-Stop client, "
+        "such as the estop SDK example, to configure E-Stop."
+    )
 
 
 def walk_to_object_in_image(robot, request_manager, debug):
@@ -115,7 +54,9 @@ def walk_to_object_in_image(robot, request_manager, debug):
         ManipulationApiResponse: Feedback from WalkToObjectInImage request.
     """
     manip_client = robot.ensure_client(ManipulationApiClient.default_service_name)
-    manipulation_api_request = request_manager.get_walk_to_object_in_image_request(debug)
+    manipulation_api_request = request_manager.get_walk_to_object_in_image_request(
+        debug
+    )
 
     # Send a manipulation API request. Using the points selected by the user, the robot will
     # walk toward the door handle.
@@ -130,8 +71,10 @@ def walk_to_object_in_image(robot, request_manager, debug):
     end_time = time.time() + timeout_sec
     while time.time() < end_time:
         response = manip_client.manipulation_api_feedback_command(feedback_request)
-        assert response.manipulation_cmd_id == command_id, "Got feedback for wrong command."
-        if (response.current_state == manipulation_api_pb2.MANIP_STATE_DONE):
+        assert (
+            response.manipulation_cmd_id == command_id
+        ), "Got feedback for wrong command."
+        if response.current_state == manipulation_api_pb2.MANIP_STATE_DONE:
             return response
     raise Exception("Manip command timed out. Try repositioning the robot.")
 
@@ -182,8 +125,8 @@ class RequestManager:
             return self._side_by_side
 
         # Convert PIL images to numpy for processing.
-        fr_fisheye_image = self.image_dict['frontright_fisheye_image'][1]
-        fl_fisheye_image = self.image_dict['frontleft_fisheye_image'][1]
+        fr_fisheye_image = self.image_dict["frontright_fisheye_image"][1]
+        fl_fisheye_image = self.image_dict["frontleft_fisheye_image"][1]
 
         # Rotate the images to align with robot Z axis.
         fr_fisheye_image = cv2.rotate(fr_fisheye_image, cv2.ROTATE_90_CLOCKWISE)
@@ -195,7 +138,7 @@ class RequestManager:
 
     def user_input_set(self):
         """bool: True if handle and hinge position set."""
-        return (self.handle_position_side_by_side and self.hinge_position_side_by_side)
+        return self.handle_position_side_by_side and self.hinge_position_side_by_side
 
     def _on_mouse(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
@@ -251,18 +194,25 @@ class RequestManager:
         if debug:
             clicked_cv2 = self.image_dict[self.clicked_source][1]
             c = (255, 0, 0)
-            cv2.circle(clicked_cv2,
-                       (int(manipulation_cmd.pixel_xy.x), int(manipulation_cmd.pixel_xy.y)), 30, c,
-                       5)
+            cv2.circle(
+                clicked_cv2,
+                (int(manipulation_cmd.pixel_xy.x), int(manipulation_cmd.pixel_xy.y)),
+                30,
+                c,
+                5,
+            )
             cv2.imshow("Debug", clicked_cv2)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
         # Populate the rest of the Manip API request.
         clicked_image_proto = self.image_dict[self.clicked_source][0]
-        manipulation_cmd.frame_name_image_sensor = clicked_image_proto.shot.frame_name_image_sensor
+        manipulation_cmd.frame_name_image_sensor = (
+            clicked_image_proto.shot.frame_name_image_sensor
+        )
         manipulation_cmd.transforms_snapshot_for_camera.CopyFrom(
-            clicked_image_proto.shot.transforms_snapshot)
+            clicked_image_proto.shot.transforms_snapshot
+        )
         manipulation_cmd.camera_model.CopyFrom(clicked_image_proto.source.pinhole)
         door_search_dist_meters = 1.25
         manipulation_cmd.offset_distance.value = door_search_dist_meters
@@ -280,8 +230,9 @@ class RequestManager:
         clicked_image_proto = self.image_dict[self.clicked_source][0]
         frame_name_image_sensor = clicked_image_proto.shot.frame_name_image_sensor
         snapshot = clicked_image_proto.shot.transforms_snapshot
-        return frame_helpers.get_a_tform_b(snapshot, frame_helpers.VISION_FRAME_NAME,
-                                           frame_name_image_sensor)
+        return frame_helpers.get_a_tform_b(
+            snapshot, frame_helpers.VISION_FRAME_NAME, frame_name_image_sensor
+        )
 
     @property
     def hinge_side(self):
@@ -303,18 +254,28 @@ def _draw_text_on_image(image, text):
     font_scale = 4
     thickness = 4
     font = cv2.FONT_HERSHEY_PLAIN
-    (text_width, text_height) = cv2.getTextSize(text, font, fontScale=font_scale,
-                                                thickness=thickness)[0]
+    (text_width, text_height) = cv2.getTextSize(
+        text, font, fontScale=font_scale, thickness=thickness
+    )[0]
 
     rectangle_bgr = (255, 255, 255)
     text_offset_x = 10
     text_offset_y = image.shape[0] - 25
     border = 10
-    box_coords = ((text_offset_x - border, text_offset_y + border),
-                  (text_offset_x + text_width + border, text_offset_y - text_height - border))
+    box_coords = (
+        (text_offset_x - border, text_offset_y + border),
+        (text_offset_x + text_width + border, text_offset_y - text_height - border),
+    )
     cv2.rectangle(image, box_coords[0], box_coords[1], rectangle_bgr, cv2.FILLED)
-    cv2.putText(image, text, (text_offset_x, text_offset_y), font, fontScale=font_scale,
-                color=(0, 0, 0), thickness=thickness)
+    cv2.putText(
+        image,
+        text,
+        (text_offset_x, text_offset_y),
+        font,
+        fontScale=font_scale,
+        color=(0, 0, 0),
+        thickness=thickness,
+    )
 
 
 def open_door(robot, request_manager, snapshot):
@@ -330,13 +291,18 @@ def open_door(robot, request_manager, snapshot):
     rospy.loginfo("Opening door...")
 
     # Using the raycast intersection point and the
-    vision_tform_raycast = frame_helpers.get_a_tform_b(snapshot, frame_helpers.VISION_FRAME_NAME,
-                                                       frame_helpers.RAYCAST_FRAME_NAME)
+    vision_tform_raycast = frame_helpers.get_a_tform_b(
+        snapshot, frame_helpers.VISION_FRAME_NAME, frame_helpers.RAYCAST_FRAME_NAME
+    )
     vision_tform_sensor = request_manager.vision_tform_sensor
     raycast_point_wrt_vision = vision_tform_raycast.get_translation()
-    ray_from_camera_to_object = raycast_point_wrt_vision - vision_tform_sensor.get_translation()
-    ray_from_camera_to_object_norm = np.sqrt(np.sum(ray_from_camera_to_object**2))
-    ray_from_camera_normalized = ray_from_camera_to_object / ray_from_camera_to_object_norm
+    ray_from_camera_to_object = (
+        raycast_point_wrt_vision - vision_tform_sensor.get_translation()
+    )
+    ray_from_camera_to_object_norm = np.sqrt(np.sum(ray_from_camera_to_object ** 2))
+    ray_from_camera_normalized = (
+        ray_from_camera_to_object / ray_from_camera_to_object_norm
+    )
 
     auto_cmd = door_pb2.DoorCommand.AutoGraspCommand()
     auto_cmd.frame_name = frame_helpers.VISION_FRAME_NAME
@@ -344,13 +310,21 @@ def open_door(robot, request_manager, snapshot):
     search_ray = search_dist_meters * ray_from_camera_normalized
     search_ray_start_in_frame = raycast_point_wrt_vision - search_ray
     auto_cmd.search_ray_start_in_frame.CopyFrom(
-        geometry_pb2.Vec3(x=search_ray_start_in_frame[0], y=search_ray_start_in_frame[1],
-                          z=search_ray_start_in_frame[2]))
+        geometry_pb2.Vec3(
+            x=search_ray_start_in_frame[0],
+            y=search_ray_start_in_frame[1],
+            z=search_ray_start_in_frame[2],
+        )
+    )
 
     search_ray_end_in_frame = raycast_point_wrt_vision + search_ray
     auto_cmd.search_ray_end_in_frame.CopyFrom(
-        geometry_pb2.Vec3(x=search_ray_end_in_frame[0], y=search_ray_end_in_frame[1],
-                          z=search_ray_end_in_frame[2]))
+        geometry_pb2.Vec3(
+            x=search_ray_end_in_frame[0],
+            y=search_ray_end_in_frame[1],
+            z=search_ray_end_in_frame[2],
+        )
+    )
 
     auto_cmd.hinge_side = request_manager.hinge_side
     auto_cmd.swing_direction = door_pb2.DoorCommand.SWING_DIRECTION_UNKNOWN
@@ -369,14 +343,20 @@ def open_door(robot, request_manager, snapshot):
     end_time = time.time() + timeout_sec
     while time.time() < end_time:
         feedback_response = door_client.open_door_feedback(feedback_request)
-        if (feedback_response.status !=
-                basic_command_pb2.RobotCommandFeedbackStatus.STATUS_PROCESSING):
+        if (
+            feedback_response.status
+            != basic_command_pb2.RobotCommandFeedbackStatus.STATUS_PROCESSING
+        ):
             raise Exception("Door command reported status ")
-        if (feedback_response.feedback.status == door_pb2.DoorCommand.Feedback.STATUS_COMPLETED):
+        if (
+            feedback_response.feedback.status
+            == door_pb2.DoorCommand.Feedback.STATUS_COMPLETED
+        ):
             rospy.loginfo("Opened door.")
             return
         time.sleep(0.5)
     raise Exception("Door command timed out. Try repositioning the robot.")
+
 
 def pitch_up(spot_wrapper):
     pose_hold_time = 10.0
@@ -386,31 +366,14 @@ def pitch_up(spot_wrapper):
 
     spot_wrapper.spot_pose(euler_x, euler_y, euler_z, pose_hold_time)
 
-def execute_open_door(robot, spot_wrapper):
-    """High level behavior sequence for commanding the robot to open a door."""
 
-# let's assume we're already at a point where we're powered on and standing up. --cst
-#    # Power on the robot.
-#    power_on(robot)
-#
-#    # Stand the robot.
-#    stand(robot)
+def execute_open_door(robot, spot_wrapper, door_detection_service_proxy):
+    """High level behavior sequence for commanding the robot to open a door."""
 
     # Pitch the robot up. This helps ensure that the door is in the field of view of the front
     # cameras.
     pitch_up(spot_wrapper)
     time.sleep(2.0)
-
-    # Capture images from the two from cameras.
-    sources = ['frontleft_fisheye_image', 'frontright_fisheye_image']
-    image_dict = get_images_as_cv2(robot, sources)
-
-    # Get handle and hinge locations from user input.
-    # TODO-- refactor this out, human-in-the-loop sorta defeats the point of having a really cool robot
-    window_name = "Open Door Example"
-    request_manager = RequestManager(image_dict, window_name)
-    request_manager.get_user_input_handle_and_hinge()
-    assert request_manager.user_input_set(), "Failed to get user input for handle and hinge."
 
     # Tell the robot to walk toward the door.
     manipulation_feedback = walk_to_object_in_image(robot, request_manager, debug=False)
@@ -424,67 +387,37 @@ def execute_open_door(robot, spot_wrapper):
     # Execute the door command.
     open_door(robot, request_manager, snapshot)
 
-#    we don't want to power off when we're done --cst
-#    # Safely power off the robot, which sits then cuts motor power.
-#    safe_power_off(robot)
+def default_door_detection_service_proxy():
+    # Capture images from the two from cameras.
+    sources = ["frontleft_fisheye_image", "frontright_fisheye_image"]
+    image_dict = get_images_as_cv2(robot, sources)
+
+    # Get handle and hinge locations from user input.
+    window_name = "Open Door Example"
+    request_manager = RequestManager(image_dict, window_name)
+    request_manager.get_user_input_handle_and_hinge()
+    assert (
+        request_manager.user_input_set()
+    ), "Failed to get user input for handle and hinge."
 
 
-# we're gonna use the already-initialized and leased robot from ROS --cst
-#def initialize_robot(options):
-#    """Generate a Robot objects, then authenticate and timesync.
-#
-#    Returns:
-#        Robot
-#    """
-#    sdk = create_standard_sdk('DoorExample')
-#    robot = sdk.create_robot(options.hostname)
-#    robot.authenticate(options.username, options.password)
-#    robot.time_sync.wait_for_sync()
-#    return robot
 
-
-def open_door_main(robot, spot_wrapper):
+def open_door_main(robot, spot_wrapper, door_detection_service_proxy):
     """Main function for opening door."""
+    if door_detection_service_proxy is None:
+        # no door detection service offered, let's construct a default
+        door_detection_service_proxy = default_door_detection_service_proxy
 
-# we've done this stuff already --cst
-#    robot = initialize_robot(options)
-#    assert robot.has_arm(), "Robot requires an arm to open door."
-#
-#    # Verify the robot is not estopped.
-#    check_estop(robot)
-#
-#    # A lease is required to drive the robot.
-#    lease_client = robot.ensure_client(LeaseClient.default_service_name)
-#    # Note that the take lease API is used, rather than acquire. Using acquire is typically a
-#    # better practice, but in this example, a user might want to switch back and forth between
-#    # using the tablet and using this script. Using take make this a bit less painful.
-#    lease = lease_client.take()
     try:
         # Execute open door command sequence.
-        execute_open_door(robot, spot_wrapper)
+        execute_open_door(robot, spot_wrapper, door_detection_service_proxy)
         comment = "Opened door successfully."
         robot.operator_comment(comment)
         rospy.loginfo(comment)
     except Exception as e:
         comment = "Failed to open door: {}".format(e)
-        rospy.logerr(e)
+        rospy.logerr(comment)
         robot.operator_comment(comment)
         rospy.loginfo(comment)
-        return False # TODO-- I don't love manipulating the control flow in an exception like this --cst
+        return False  # TODO-- I don't love manipulating the control flow in an exception like this --cst
     return True
-
-# won't be using this --cst
-#def main(argv):
-#    """Command line interface."""
-#    parser = argparse.ArgumentParser(description=__doc__)
-#    add_common_arguments(parser)
-#    parser.add_argument('--debug', action='store_true', help='Show intermediate debug data.')
-#
-#    options = parser.parse_args(argv)
-#    return open_door_main(options)
-#
-#
-#if __name__ == '__main__':
-#    if not main(sys.argv[1:]):
-#        sys.exit(1)
-
