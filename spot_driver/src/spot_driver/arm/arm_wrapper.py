@@ -26,8 +26,10 @@ class ArmWrapper:
             self.handle_open_door,
         )
 
+        dds = 'door_detection_service'
         self.door_detection_service_proxy = None
-        #self.door_detection_service_proxy = rospy.ServiceProxy("door_detection_service", Detection2D)
+        if rospy.has_param(dds):
+            self.door_detection_service_proxy = rospy.ServiceProxy(rospy.get_param(dds), Detection2D)
 
         self._init_bosdyn_clients()
         self._init_actionservers()

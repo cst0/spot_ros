@@ -375,6 +375,8 @@ def execute_open_door(robot, spot_wrapper, door_detection_service_proxy):
     pitch_up(spot_wrapper)
     time.sleep(2.0)
 
+    request_manager = door_detection_service_proxy(robot)
+
     # Tell the robot to walk toward the door.
     manipulation_feedback = walk_to_object_in_image(robot, request_manager, debug=False)
     time.sleep(3.0)
@@ -387,7 +389,7 @@ def execute_open_door(robot, spot_wrapper, door_detection_service_proxy):
     # Execute the door command.
     open_door(robot, request_manager, snapshot)
 
-def default_door_detection_service_proxy():
+def default_door_detection_service_proxy(robot):
     # Capture images from the two from cameras.
     sources = ["frontleft_fisheye_image", "frontright_fisheye_image"]
     image_dict = get_images_as_cv2(robot, sources)
@@ -400,6 +402,7 @@ def default_door_detection_service_proxy():
         request_manager.user_input_set()
     ), "Failed to get user input for handle and hinge."
 
+    return request_manager
 
 
 def open_door_main(robot, spot_wrapper, door_detection_service_proxy):

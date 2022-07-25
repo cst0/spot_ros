@@ -56,6 +56,7 @@ class SpotROS():
         self.callbacks["front_image"] = self.FrontImageCB
         self.callbacks["side_image"] = self.SideImageCB
         self.callbacks["rear_image"] = self.RearImageCB
+        self.callbacks["gripper_image"] = self.GripperImageCB
 
     def RobotStateCB(self, results):
         """Callback for when the Spot Wrapper gets new robot state data.
@@ -231,8 +232,8 @@ class SpotROS():
         del results
         data = self.spot_wrapper.rear_images
         if data:
-            mage_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
-            self.back_image_pub.publish(mage_msg0)
+            image_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
+            self.back_image_pub.publish(image_msg0)
             self.back_image_info_pub.publish(camera_info_msg0)
             mage_msg1, camera_info_msg1 = getImageMsg(data[1], self.spot_wrapper)
             self.back_depth_pub.publish(mage_msg1)
@@ -240,6 +241,33 @@ class SpotROS():
 
             self.populate_camera_static_transforms(data[0])
             self.populate_camera_static_transforms(data[1])
+
+    def GripperImageCB(self, results):
+        """Callback for when the Spot Wrapper gets new gripper image data.
+
+        Args:
+            results: FutureWrapper object of AsyncPeriodicQuery callback
+        """
+        del results
+        data = self.spot_wrapper.gripper_images
+        if self.spot_wrapper.check_has_arm() and not data:
+            rospy.loginfo_throttle(1, "We have an arm but no gripper image data received... if this happens at the start it's OK, otherwise it's a problem")
+        if data:
+            image_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
+            self.gripper_image_pubs[0].publish(image_msg0)
+            self.gripper_camera_info_pubs[0].publish(camera_info_msg0)
+
+            image_msg0, camera_info_msg0 = getImageMsg(data[1], self.spot_wrapper)
+            self.gripper_image_pubs[1].publish(image_msg0)
+            self.gripper_camera_info_pubs[1].publish(camera_info_msg0)
+
+            image_msg0, camera_info_msg0 = getImageMsg(data[2], self.spot_wrapper)
+            self.gripper_image_pubs[2].publish(image_msg0)
+            self.gripper_camera_info_pubs[2].publish(camera_info_msg0)
+
+            self.populate_camera_static_transforms(data[0])
+            self.populate_camera_static_transforms(data[1])
+            self.populate_camera_static_transforms(data[2])
 
     def handle_claim(self, req):
         """ROS service handler for the claim service"""
@@ -580,7 +608,6 @@ class SpotROS():
         self.username = rospy.get_param('~username', 'default_value')
         self.password = rospy.get_param('~password', 'default_value')
         self.hostname = rospy.get_param('~hostname', 'default_value')
-        self.has_arm  = rospy.get_param('~has_arm', False)
         self.motion_deadzone = rospy.get_param('~deadzone', 0.05)
         self.estop_timeout = rospy.get_param('~estop_timeout', 9.0)
 
@@ -605,8 +632,15 @@ class SpotROS():
 
         self.logger = logging.getLogger('rosout')
 
-        rospy.loginfo("Starting ROS driver for Spot at "+str(self.hostname)+" as "+str(self.username)+" "+str(self.password)+("" if not self.has_arm else " (has arm)"))
-        self.spot_wrapper = SpotWrapper(self.username, self.password, self.hostname, self.logger, self.has_arm, self.estop_timeout, self.rates, self.callbacks)
+        rospy.loginfo("Starting ROS driver for Spot at "+str(self.hostname)+" as "+str(self.username)+" "+str(self.password))
+        self.spot_wrapper = SpotWrapper(self.username, self.password, self.hostname, self.logger, self.estop_timeout, self.rates, self.callbacks)
+
+        if not self.spot_wrapper.is_valid:
+            rospy.logerr("Failed to connect to Spot")
+            return
+
+        if self.spot_wrapper.check_has_arm():
+            rospy.loginfo("Arm detected, started that too")
 
         if self.spot_wrapper.is_valid:
             # Images #
@@ -615,6 +649,7 @@ class SpotROS():
             self.frontright_image_pub = rospy.Publisher('camera/frontright/image', Image, queue_size=10)
             self.left_image_pub = rospy.Publisher('camera/left/image', Image, queue_size=10)
             self.right_image_pub = rospy.Publisher('camera/right/image', Image, queue_size=10)
+
             # Depth #
             self.back_depth_pub = rospy.Publisher('depth/back/image', Image, queue_size=10)
             self.frontleft_depth_pub = rospy.Publisher('depth/frontleft/image', Image, queue_size=10)
@@ -634,6 +669,13 @@ class SpotROS():
             self.frontright_depth_info_pub = rospy.Publisher('depth/frontright/camera_info', CameraInfo, queue_size=10)
             self.left_depth_info_pub = rospy.Publisher('depth/left/camera_info', CameraInfo, queue_size=10)
             self.right_depth_info_pub = rospy.Publisher('depth/right/camera_info', CameraInfo, queue_size=10)
+
+            self.gripper_image_pubs = []
+            self.gripper_camera_info_pubs = []
+            if self.spot_wrapper.check_has_arm():
+                for t in ['hand_color', 'hand_depth', 'hand_image']:
+                    self.gripper_image_pubs.append(rospy.Publisher('camera/'+t+'/image', Image, queue_size=10))
+                    self.gripper_camera_info_pubs.append(rospy.Publisher('camera/'+t+'/camera_info', CameraInfo, queue_size=10))
 
             # Status Publishers #
             self.joint_state_pub = rospy.Publisher('joint_states', JointState, queue_size=10)

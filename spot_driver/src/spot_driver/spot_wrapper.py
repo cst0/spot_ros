@@ -34,6 +34,30 @@ import bosdyn.api.robot_state_pb2
 from bosdyn.api import basic_command_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 
+"""
+Image sources:
+	back_depth
+	back_depth_in_visual_frame
+	back_fisheye_image
+	frontleft_depth
+	frontleft_depth_in_visual_frame
+	frontleft_fisheye_image
+	frontright_depth
+	frontright_depth_in_visual_frame
+	frontright_fisheye_image
+	hand_color_image
+	hand_color_in_hand_depth_frame
+	hand_depth
+	hand_depth_in_hand_color_frame
+	hand_image
+	left_depth
+	left_depth_in_visual_frame
+	left_fisheye_image
+	right_depth
+	right_depth_in_visual_frame
+	right_fisheye_image
+"""
+
 """List of image sources for front image periodic query"""
 front_image_sources = ['frontleft_fisheye_image', 'frontright_fisheye_image', 'frontleft_depth', 'frontright_depth']
 """List of image sources for side image periodic query"""
@@ -41,7 +65,7 @@ side_image_sources = ['left_fisheye_image', 'right_fisheye_image', 'left_depth',
 """List of image sources for rear image periodic query"""
 rear_image_sources = ['back_fisheye_image', 'back_depth']
 """List of image sources for gripper image periodic query"""
-gripper_image_source = ['gripper_color_camera_z_forward']
+gripper_image_sources = ['hand_color_image', 'hand_depth', 'hand_image']
 
 
 class AsyncRobotState(AsyncPeriodicQuery):
@@ -226,12 +250,11 @@ class AsyncIdle(AsyncPeriodicQuery):
 
 class SpotWrapper():
     """Generic wrapper class to encompass release 1.1.4 API features as well as maintaining leases automatically"""
-    def __init__(self, username, password, hostname, logger, has_arm=False, estop_timeout=9.0, rates = {}, callbacks = {}):
+    def __init__(self, username, password, hostname, logger, estop_timeout=9.0, rates = {}, callbacks = {}):
         self._username = username
         self._password = password
         self._hostname = hostname
         self._logger = logger
-        self._has_arm = has_arm
         self._arm = None # we'll get to this once self._robot is setup
         self._rates = rates
         self._callbacks = callbacks
@@ -283,6 +306,12 @@ class SpotWrapper():
             self._valid = False
             return
 
+        self._gripper_image_requests = []
+        if self._robot.has_arm:
+            for source in gripper_image_sources:
+                rospy.loginfo("Robot has arm so adding image source: %s", source)
+                self._gripper_image_requests.append(build_image_request(source, image_format=image_pb2.Image.FORMAT_RAW))
+
         if self._robot:
             # Clients
             try:
@@ -295,7 +324,7 @@ class SpotWrapper():
                 self._image_client = self._robot.ensure_client(ImageClient.default_service_name)
                 self._estop_client = self._robot.ensure_client(EstopClient.default_service_name)
 
-                if self._has_arm:
+                if self._robot.has_arm:
                     self._arm = ArmWrapper(self._robot, self, self._logger)
                 #self._nav = graph_nav_command_line.GraphNavInterface(self._robot, self, self._logger)
                 self._docking_client = self._robot.ensure_client(DockingClient.default_service_name)
@@ -313,21 +342,54 @@ class SpotWrapper():
 
             # Async Tasks
             self._async_task_list = []
-            self._robot_state_task = AsyncRobotState(self._robot_state_client, self._logger, max(0.0, self._rates.get("robot_state", 0.0)), self._callbacks.get("robot_state", lambda:None))
-            self._robot_metrics_task = AsyncMetrics(self._robot_state_client, self._logger, max(0.0, self._rates.get("metrics", 0.0)), self._callbacks.get("metrics", lambda:None))
-            self._lease_task = AsyncLease(self._lease_client, self._logger, max(0.0, self._rates.get("lease", 0.0)), self._callbacks.get("lease", lambda:None))
-            self._front_image_task = AsyncImageService(self._image_client, self._logger, max(0.0, self._rates.get("front_image", 0.0)), self._callbacks.get("front_image", lambda:None), self._front_image_requests)
-            self._side_image_task = AsyncImageService(self._image_client, self._logger, max(0.0, self._rates.get("side_image", 0.0)), self._callbacks.get("side_image", lambda:None), self._side_image_requests)
-            self._rear_image_task = AsyncImageService(self._image_client, self._logger, max(0.0, self._rates.get("rear_image", 0.0)), self._callbacks.get("rear_image", lambda:None), self._rear_image_requests)
-            self._idle_task = AsyncIdle(self._robot_command_client, self._logger, 10.0, self)
+            self._robot_state_task = AsyncRobotState(self._robot_state_client,
+                    self._logger, max(0.0, self._rates.get("robot_state",
+                        0.0)), self._callbacks.get("robot_state", lambda:None))
+            self._robot_metrics_task = AsyncMetrics(self._robot_state_client,
+                    self._logger, max(0.0, self._rates.get("metrics", 0.0)),
+                    self._callbacks.get("metrics", lambda:None))
+            self._lease_task = AsyncLease(self._lease_client, self._logger,
+                    max(0.0, self._rates.get("lease", 0.0)),
+                    self._callbacks.get("lease", lambda:None))
+            self._front_image_task = AsyncImageService(self._image_client,
+                    self._logger, max(0.0, self._rates.get("front_image",
+                        0.0)), self._callbacks.get("front_image", lambda:None),
+                    self._front_image_requests)
+            self._side_image_task = AsyncImageService(self._image_client,
+                    self._logger, max(0.0, self._rates.get("side_image", 0.0)),
+                    self._callbacks.get("side_image", lambda:None),
+                    self._side_image_requests)
+            self._rear_image_task = AsyncImageService(self._image_client,
+                    self._logger, max(0.0, self._rates.get("rear_image", 0.0)),
+                    self._callbacks.get("rear_image", lambda:None),
+                    self._rear_image_requests)
+            self._idle_task = AsyncIdle(self._robot_command_client,
+                    self._logger, 10.0, self)
 
-            self._estop_endpoint = None
+            async_task_list = [self._robot_state_task,
+                    self._robot_metrics_task, self._lease_task,
+                    self._front_image_task, self._side_image_task,
+                    self._rear_image_task, self._idle_task]
+
+            if self._robot.has_arm:
+                rospy.loginfo("Robot has arm so adding gripper async camera task")
+                self._gripper_image_task = \
+                    AsyncImageService(self._image_client, self._logger, max(0.0,
+                    self._rates.get("gripper_image", 0.0)),
+                    self._callbacks.get("gripper_image", lambda:None),
+                    self._gripper_image_requests)
+                async_task_list.append(self._gripper_image_task)
 
             self._async_tasks = AsyncTasks(
-                [self._robot_state_task, self._robot_metrics_task, self._lease_task, self._front_image_task, self._side_image_task, self._rear_image_task, self._idle_task])
+                async_task_list
+            )
 
+            self._estop_endpoint = None
             self._robot_id = None
             self._lease = None
+
+    def check_has_arm(self):
+        return self._robot.has_arm
 
     @property
     def logger(self):
@@ -373,6 +435,11 @@ class SpotWrapper():
     def rear_images(self):
         """Return latest proto from the _rear_image_task"""
         return self._rear_image_task.proto
+
+    @property
+    def gripper_images(self):
+        """Return latest proto from the _gripper_image_task"""
+        return self._gripper_image_task.proto
 
     @property
     def is_standing(self):
@@ -579,25 +646,6 @@ class SpotWrapper():
         if monitor_command:
             self._last_stand_command = response[2]
         return response[0], response[1]
-
-
-#    def spot_pose(self, euler_x, euler_y, euler_z, monitor_command=True):
-#        """Achieve an arbitrary pose. Requires the e-stop and motor power to be enabled."""
-#        #footprint_R_body = geometry.EulerZXY(euler_z, euler_x, euler_y)
-#        timeout_sec = 10.0
-#        end_time = time.time() + timeout_sec
-#        footprint_R_body = geometry.EulerZXY(0.0, 0.0, -1 * math.pi / 6.0)
-#        cmd = RobotCommandBuilder.synchro_stand_command(footprint_R_body=footprint_R_body)
-#        cmd_id = self._robot_command_client.robot_command(lease=self._lease.lease_proto, command=cmd)
-#        while time.time() < end_time:
-#            response = self._robot_command_client.robot_command_feedback(cmd_id)
-#            synchronized_feedback = response.feedback.synchronized_feedback
-#            status = synchronized_feedback.mobility_command_feedback.stand_feedback.status
-#            if (status == basic_command_pb2.StandCommand.Feedback.STATUS_IS_STANDING):
-#                if monitor_command:
-#                    return response[2]
-#                return response[0], response[1]
-#        raise Exception("Failed to pitch robot.")
 
     def safe_power_off(self):
         """Stop the robot's motion and sit if possible.  Once sitting, disable motor power."""
