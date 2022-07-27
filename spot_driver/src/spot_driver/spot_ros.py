@@ -621,7 +621,7 @@ class SpotROS():
         # Spot has 2 types of odometries: 'odom' and 'vision'
         # The former one is kinematic odometry and the second one is a combined odometry of vision and kinematics
         # These params enables to change which odometry frame is a parent of body frame and to change tf names of each odometry frames.
-        self.mode_parent_odom_tf = rospy.get_param('~mode_parent_odom_tf', 'odom') # 'vision' or 'odom'
+        self.mode_parent_odom_tf = rospy.get_param('~mode_parent_odom_tf', 'vision') # 'vision' or 'odom'
         self.tf_name_kinematic_odom = rospy.get_param('~tf_name_kinematic_odom', 'odom')
         self.tf_name_raw_kinematic = 'odom'
         self.tf_name_vision_odom = rospy.get_param('~tf_name_vision_odom', 'vision')

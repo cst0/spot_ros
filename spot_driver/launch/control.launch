@@ -1,5 +1,5 @@
 <launch>
-  <arg name="joy"        default="true" />
+  <arg name="joy"        default="false" />
   <arg name="joy_dev"    default="$(optenv SPOT_JOY_DEVICE /dev/input/js0)" />
   <arg name="joy_config" default="$(eval optenv('SPOT_JOY_CONFIG', find('spot_driver') + '/config/teleop.yaml'))" />
 
