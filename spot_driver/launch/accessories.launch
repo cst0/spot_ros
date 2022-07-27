@@ -1,4 +1,4 @@
 <launch>
-    <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch">
-    </include>
+    <include file="$(find velodyne_pointcloud)/launch/VLP16_points.launch" />
+    <node pkg="tf" type="static_transform_publisher" name="velodyne_static" args="0 0 0 0 0 0 rear_rail velodyne 10" />
 </launch>
