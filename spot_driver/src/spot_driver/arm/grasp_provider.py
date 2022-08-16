@@ -99,6 +99,12 @@ class RequestManager:
         self._side_by_side = None
         self.clicked_source = None
 
+    def reset(self):
+        self.handle_position_side_by_side = None
+        self.hinge_position_side_by_side = None
+        self._side_by_side = None
+        self.clicked_source = None
+
     @property
     def side_by_side(self):
         """cv2.Image: Side by side rotated frontleft and frontright fisheye images"""
@@ -139,6 +145,26 @@ class RequestManager:
         while not self.user_input_set():
             cv2.waitKey(1)
         cv2.destroyAllWindows()
+
+    def get_ros_input_handle_and_hinge(self):
+        # check if the door detection ROS service is available
+        srv_topic = "/door_detection"
+        try:
+            rospy.wait_for_service(srv_topic, timeout=1)
+        except:
+            rospy.logerr("Door detection service failed")
+            return False
+
+        try:
+            from door_detector_ros.srv import DoorDetection, DoorDetectionResponse
+            dd:DoorDetectionResponse = rospy.ServiceProxy(srv_topic, DoorDetection).call()
+            self.handle_position_side_by_side = (dd.handle.x, dd.handle.y)
+            self.hinge_position_side_by_side = (dd.hinge.x, dd.hinge.y)
+        except:
+            rospy.logerr("Service call failed")
+            return False
+        return True
+
 
     def get_walk_to_object_in_image_request(self, debug):
         """Convert from touchpoints in side by side image to a WalkToObjectInImage request.
@@ -253,7 +279,10 @@ class GraspProvider:
         # Get handle and hinge locations from user input.
         window_name = "Open Door Example"
         request_manager = RequestManager(image_dict, window_name)
-        request_manager.get_user_input_handle_and_hinge()
+        # attempt ROS input
+        success = request_manager.get_ros_input_handle_and_hinge()
+        if not success:
+            request_manager.get_user_input_handle_and_hinge()
         assert (
             request_manager.user_input_set()
         ), "Failed to get user input for handle and hinge."

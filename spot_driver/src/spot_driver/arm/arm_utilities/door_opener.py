@@ -220,6 +220,25 @@ class RequestManager:
         request = ManipulationApiRequest(walk_to_object_in_image=manipulation_cmd)
         return request
 
+    def get_ros_input_handle_and_hinge(self):
+        # check if the door detection ROS service is available
+        srv_topic = "/door_detection"
+        try:
+            rospy.wait_for_service(srv_topic, timeout=1)
+        except:
+            rospy.logerr("Door detection service failed")
+            return False
+
+        try:
+            from door_detector_ros.srv import DoorDetection, DoorDetectionResponse
+            dd:DoorDetectionResponse = rospy.ServiceProxy(srv_topic, DoorDetection).call()
+            self.handle_position_side_by_side = (dd.handle.x, dd.handle.y)
+            self.hinge_position_side_by_side = (dd.hinge.x, dd.hinge.y)
+        except:
+            rospy.logerr("Service call failed")
+            return False
+        return True
+
     @property
     def vision_tform_sensor(self):
         """Look up vision_tform_sensor for sensor which user clicked.
