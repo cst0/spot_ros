@@ -21,6 +21,8 @@
     <remap from="tf" to="/tf"/>
   </node>
 
+  <node pkg="spot_driver" type="camera_depth" name="camera_depth" ns="spot" />
+
   <!--node pkg="twist_mux" type="twist_mux" name="twist_mux" >
     <rosparam command="load" file="$(find spot_driver)/config/twist_mux.yaml" />
     <remap from="cmd_vel_out" to="spot/cmd_vel"/>
