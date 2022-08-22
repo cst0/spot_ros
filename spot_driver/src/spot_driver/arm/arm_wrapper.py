@@ -1,3 +1,5 @@
+from bosdyn.client.robot import RobotCommandClient
+from bosdyn.client.robot_command import RobotCommandBuilder, block_until_arm_arrives
 import rospy
 import actionlib
 
@@ -26,6 +28,12 @@ class ArmWrapper:
             self.handle_open_door,
         )
 
+        self.stow_arm_srv = rospy.Service(
+                "stow_arm",
+                Trigger,
+                self.handle_stow_arm,
+                )
+
         dds = 'door_detection_service'
         self.door_detection_service_proxy = None
         if rospy.has_param(dds):
@@ -47,6 +55,13 @@ class ArmWrapper:
             auto_start=False,
         )
         self.open_door_as.start()
+
+    def handle_stow_arm(self, goal):
+        del goal
+        command_client = self._robot.ensure_client(RobotCommandClient.default_service_name)
+        cmd = RobotCommandBuilder.arm_stow_command()
+        cmd_id = command_client.robot_command(cmd)
+        block_until_arm_arrives(command_client, cmd_id, 3.0)
 
     def handle_open_door(self, goal):
         del goal
