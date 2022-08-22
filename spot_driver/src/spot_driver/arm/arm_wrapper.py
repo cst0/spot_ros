@@ -29,21 +29,35 @@ class ArmWrapper:
         )
 
         self.stow_arm_srv = rospy.Service(
-                "stow_arm",
-                Trigger,
-                self.handle_stow_arm,
-                )
+            "stow_arm",
+            Trigger,
+            self.handle_stow_arm,
+        )
+
+        self.stow_arm_srv = rospy.Service(
+            "unstow_arm",
+            Trigger,
+            self.handle_unstow_arm,
+        )
 
         self.open_gripper_srv = rospy.Service(
-                "gripper_open",
-                Trigger,
-                self.handle_gripper_open,
-            )
+            "gripper_open",
+            Trigger,
+            self.handle_gripper_open,
+        )
 
-        dds = 'door_detection_service'
+        self.open_gripper_srv = rospy.Service(
+            "gripper_close",
+            Trigger,
+            self.handle_gripper_close,
+        )
+
+        dds = "door_detection_service"
         self.door_detection_service_proxy = None
         if rospy.has_param(dds):
-            self.door_detection_service_proxy = rospy.ServiceProxy(rospy.get_param(dds), Detection2D)
+            self.door_detection_service_proxy = rospy.ServiceProxy(
+                rospy.get_param(dds), Detection2D
+            )
 
         self._init_bosdyn_clients()
         self._init_actionservers()
@@ -62,22 +76,27 @@ class ArmWrapper:
         )
         self.open_door_as.start()
 
-    def handle_stow_arm(self, goal):
-        del goal
-        command_client = self._robot.ensure_client(RobotCommandClient.default_service_name)
-        cmd = RobotCommandBuilder.arm_stow_command()
+    def _send_arm_cmd(self, cmd):
+        command_client = self._robot.ensure_client(
+            RobotCommandClient.default_service_name
+        )
         cmd_id = command_client.robot_command(cmd)
-        block_until_arm_arrives(command_client, cmd_id, 3.0)
+        return block_until_arm_arrives(command_client, cmd_id, 3.0)
 
-    def handle_gripper_open(self, goal):
-        del goal
-        rospy.loginfo("Got a gripper open request from the user")
-        command_client = self._robot.ensure_client(RobotCommandClient.default_service_name)
-        gripper_command = RobotCommandBuilder.claw_gripper_open_command()
-        cmd_id = command_client.robot_command(gripper_command)
-        block_until_arm_arrives(gripper_command, cmd_id, 3.0)
+    def handle_stow_arm(self, _):
+        return self._send_arm_cmd(RobotCommandBuilder.arm_stow_command())
 
-    def handle_open_door(self, goal):
-        del goal
+    def handle_unstow_arm(self, _):
+        return self._send_arm_cmd(cmd=RobotCommandBuilder.arm_ready_command())
+
+    def handle_gripper_open(self, _):
+        return self._send_arm_cmd(RobotCommandBuilder.claw_gripper_open_command())
+
+    def handle_gripper_close(self, _):
+        return self._send_arm_cmd(RobotCommandBuilder.claw_gripper_close_command())
+
+    def handle_open_door(self, _):
         rospy.loginfo("Got a open door request")
-        open_door_main(self._robot, self._spot_wrapper, self.door_detection_service_proxy)
+        return open_door_main(
+            self._robot, self._spot_wrapper, self.door_detection_service_proxy
+        )
