@@ -3,7 +3,7 @@ from bosdyn.client.robot_command import RobotCommandBuilder, block_until_arm_arr
 import rospy
 import actionlib
 
-from std_srvs.srv import Trigger
+from std_srvs.srv import Trigger, TriggerResponse
 from spot_msgs.msg import OpenDoorAction
 from spot_msgs.srv import OpenDoor
 from vision_msgs.msg import Detection2D
@@ -81,7 +81,7 @@ class ArmWrapper:
             RobotCommandClient.default_service_name
         )
         cmd_id = command_client.robot_command(cmd)
-        return block_until_arm_arrives(command_client, cmd_id, 3.0)
+        return TriggerResponse(success=block_until_arm_arrives(command_client, cmd_id, 3.0), message="")
 
     def handle_stow_arm(self, _):
         return self._send_arm_cmd(RobotCommandBuilder.arm_stow_command())
