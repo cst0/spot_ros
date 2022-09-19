@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from spot_driver.spot_ros_mock import SpotROSMock
+
+if __name__ == "__main__":
+    SR = SpotROSMock()
+    SR.main()
