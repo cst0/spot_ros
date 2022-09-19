@@ -3,7 +3,7 @@
          type="spot_viz::ControlPanel"
          base_class_type="rviz::Panel">
     <description>
-      A panel for controlling the Boston Dynamics Spot robot with the Clearpath driver
+        A panel for controlling the Boston Dynamics Spot robot with the cst0/spot_ros driver
     </description>
   </class>
 </library>
