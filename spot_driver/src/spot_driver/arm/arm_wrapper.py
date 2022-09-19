@@ -5,8 +5,6 @@ import actionlib
 
 from std_srvs.srv import Trigger, TriggerResponse
 from spot_msgs.msg import OpenDoorAction
-from spot_msgs.srv import OpenDoor
-from vision_msgs.msg import Detection2D
 from spot_driver.arm.arm_utilities.object_grabber import object_grabber_main
 from spot_driver.arm.arm_utilities.door_opener import open_door_main
 
@@ -59,13 +57,8 @@ class ArmWrapper:
             self.handle_grasp_point_userinput,
         )
 
-        dds = "door_detection_service"
-        self.door_detection_service_proxy = None
-        if rospy.has_param(dds):
-            self.door_detection_service_proxy = rospy.ServiceProxy(
-                rospy.get_param(dds), Detection2D
-            )
-        self.object_detection_service_proxy = None
+        self.door_detection_sub_topic = "/door_detections"
+        self.object_detection_sub_topic = "/object_detections"
 
         self._init_bosdyn_clients()
         self._init_actionservers()
@@ -106,11 +99,11 @@ class ArmWrapper:
     def handle_open_door(self, _):
         rospy.loginfo("Got a open door request")
         return open_door_main(
-            self._robot, self._spot_wrapper, self.door_detection_service_proxy
+            self._robot, self._spot_wrapper, self.door_detection_sub_topic
         ), "Complete!"
 
     def handle_grasp_point_userinput(self, _):
         rospy.loginfo("Got grasp point request (w/ user input)")
         return object_grabber_main(
-            self._robot, self._spot_wrapper
+            self._robot, self._spot_wrapper, self.object_detection_sub_topic
         ), "Complete!"

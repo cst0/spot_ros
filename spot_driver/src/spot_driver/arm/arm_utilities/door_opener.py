@@ -9,6 +9,7 @@
 
 import math
 import time
+from typing import List
 import rospy
 
 from bosdyn.api import manipulation_api_pb2
@@ -27,6 +28,7 @@ from bosdyn.client.manipulation_api_client import ManipulationApiClient
 
 import cv2
 import numpy as np
+from vision_msgs.msg import Detection2D
 
 
 def check_estop(robot):
@@ -41,7 +43,7 @@ def check_estop(robot):
     )
 
 
-def walk_to_object_in_image(robot, request_manager, debug):
+def walk_to_object_in_image(robot, request_manager: "RequestManager", debug):
     """Command the robot to walk toward user selected point. The WalkToObjectInImage feedback
     reports a raycast result, converting the 2D touchpoint to a 3D location in space.
 
@@ -110,18 +112,46 @@ class RequestManager:
         window_name: (str) Name of display window..
     """
 
-    def __init__(self, image_dict, window_name):
+    def __init__(self):
+        self.detections = []
+        self.image_dict = {}
+        self.window_name=''
+        self.handle_position_side_by_side= None
+        self.hinge_position_side_by_side=None
+        self._side_by_side=None
+        self.image_detection_source_name=None
+        self._ready = False
+
+    def init_ros_image_mode(self, detections: List[Detection2D]):
+        self.detections = detections
+        self.mode = "ros"
+        self._ready = True
+
+    def init_user_input_mode(self, image_dict, window_name):
         self.image_dict = image_dict
         self.window_name = window_name
         self.handle_position_side_by_side = None
         self.hinge_position_side_by_side = None
         self._side_by_side = None
-        self.clicked_source = None
+        self.image_detection_source_name = None
+        self.mode = "user"
+        self._ready = True
 
     @property
-    def side_by_side(self):
-        """cv2.Image: Side by side rotated frontleft and frontright fisheye images"""
-        if self._side_by_side is not None:
+    def source_image(self):
+
+        if not self._ready:
+            raise Exception(
+                "Class not instantiated via ros_image_mode or user_input_mode"
+            )
+
+        if self.mode == "user":
+            return self.generate_side_by_side()
+        if self.mode == "ros":
+            return self.generate_ros_source()
+
+    def generate_side_by_side(self):
+        if self._side_by_side:
             return self._side_by_side
 
         # Convert PIL images to numpy for processing.
@@ -136,6 +166,9 @@ class RequestManager:
 
         return self._side_by_side
 
+    def generate_ros_source(self):
+        return self.ros_image
+
     def user_input_set(self):
         """bool: True if handle and hinge position set."""
         return self.handle_position_side_by_side and self.hinge_position_side_by_side
@@ -143,21 +176,58 @@ class RequestManager:
     def _on_mouse(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
             if not self.handle_position_side_by_side:
-                cv2.circle(self.side_by_side, (x, y), 30, (255, 0, 0), 5)
-                _draw_text_on_image(self.side_by_side, "Click hinge.")
-                cv2.imshow(self.window_name, self.side_by_side)
+                cv2.circle(self.source_image, (x, y), 30, (255, 0, 0), 5)
+                _draw_text_on_image(self.source_image, "Click hinge.")
+                cv2.imshow(self.window_name, self.source_image)
                 self.handle_position_side_by_side = (x, y)
             elif not self.hinge_position_side_by_side:
                 self.hinge_position_side_by_side = (x, y)
 
     def get_user_input_handle_and_hinge(self):
         """Open window showing the side by side fisheye images with on screen prompts for user."""
-        _draw_text_on_image(self.side_by_side, "Click handle.")
-        cv2.imshow(self.window_name, self.side_by_side)
+        _draw_text_on_image(self.source_image, "Click handle.")
+        cv2.imshow(self.window_name, self.source_image)
         cv2.setMouseCallback(self.window_name, self._on_mouse)
         while not self.user_input_set():
             cv2.waitKey(1)
         cv2.destroyAllWindows()
+
+    def get_ros_input_handle_and_hinge(self):
+        grouped_detections = {}
+        for detection in self.detections:
+            if detection.results[0].id not in grouped_detections:
+                grouped_detections[detection.results[0].id] = []
+            grouped_detections[detection.results[0].id].append(detection.bbox)
+
+        average_handle_x = 0.0
+        average_handle_y = 0.0
+        average_door_x_center = 0.0
+        average_door_x_left = 0.0
+        average_door_x_right = 0.0
+
+        for door in grouped_detections[0]:
+            average_door_x_center += door.center_x
+            average_door_x_left += door.center_x - (door.size_x / 2)
+            average_door_x_right += door.center_x + (door.size_x / 2)
+        average_door_x_center /= len(grouped_detections[0])
+        average_door_x_left /= len(grouped_detections[0])
+        average_door_x_right /= len(grouped_detections[0])
+
+        for handle in grouped_detections[1]:
+            average_handle_x += handle.center_x
+            average_handle_y += handle.center_y
+        average_handle_x /= len(grouped_detections[1])
+        average_handle_y /= len(grouped_detections[1])
+
+        self.handle_position_side_by_side = (average_handle_x, average_handle_y)
+
+        # is the handle to the right or left of the center of the door?
+        hinge_x = average_door_x_center
+        if average_handle_x < average_door_x_center:
+            hinge_x = average_door_x_right
+        else:
+            hinge_x = average_door_x_left
+        self.hinge_position_side_by_side = (hinge_x, average_handle_y)
 
     def get_walk_to_object_in_image_request(self, debug):
         """Convert from touchpoints in side by side image to a WalkToObjectInImage request.
@@ -171,14 +241,19 @@ class RequestManager:
         """
 
         # Figure out which source the user actually clicked.
-        height, width = self.side_by_side.shape
-        if self.handle_position_side_by_side[0] > width / 2:
-            self.clicked_source = "frontleft_fisheye_image"
-            rotated_pixel = self.handle_position_side_by_side
-            rotated_pixel = (rotated_pixel[0] - width / 2, rotated_pixel[1])
-        else:
-            self.clicked_source = "frontright_fisheye_image"
-            rotated_pixel = self.handle_position_side_by_side
+        height, width = self.source_image.shape
+        assert (
+            self.handle_position_side_by_side is not None
+        ), "handle position has not yet been found! Cannot continue."
+        rotated_pixel = self.handle_position_side_by_side
+        if self.mode == "user":
+            if self.handle_position_side_by_side[0] > width / 2:
+                self.image_detection_source_name = "frontleft_fisheye_image"
+                rotated_pixel = (rotated_pixel[0] - width / 2, rotated_pixel[1])
+            else:
+                self.image_detection_source_name = "frontright_fisheye_image"
+        elif self.mode == "ros":
+            self.image_detection_source_name = "hand_color_image"
 
         # Undo pixel rotation by rotation 90 deg CCW.
         manipulation_cmd = WalkToObjectInImage()
@@ -192,7 +267,7 @@ class RequestManager:
 
         # Optionally show debug image.
         if debug:
-            clicked_cv2 = self.image_dict[self.clicked_source][1]
+            clicked_cv2 = self.image_dict[self.image_detection_source_name][1]
             c = (255, 0, 0)
             cv2.circle(
                 clicked_cv2,
@@ -206,7 +281,8 @@ class RequestManager:
             cv2.destroyAllWindows()
 
         # Populate the rest of the Manip API request.
-        clicked_image_proto = self.image_dict[self.clicked_source][0]
+        # clicked_image_proto = self.image_dict[self.image_detection_source_name][0]
+        clicked_image_proto = self.image_detection_source_name
         manipulation_cmd.frame_name_image_sensor = (
             clicked_image_proto.shot.frame_name_image_sensor
         )
@@ -220,25 +296,6 @@ class RequestManager:
         request = ManipulationApiRequest(walk_to_object_in_image=manipulation_cmd)
         return request
 
-    def get_ros_input_handle_and_hinge(self):
-        # check if the door detection ROS service is available
-        srv_topic = "/door_detection"
-        try:
-            rospy.wait_for_service(srv_topic, timeout=1)
-        except:
-            rospy.logerr("Door detection service failed")
-            return False
-
-        try:
-            from door_detector_ros.srv import DoorDetection, DoorDetectionResponse
-            dd:DoorDetectionResponse = rospy.ServiceProxy(srv_topic, DoorDetection).call()
-            self.handle_position_side_by_side = (dd.handle.x, dd.handle.y)
-            self.hinge_position_side_by_side = (dd.hinge.x, dd.hinge.y)
-        except:
-            rospy.logerr("Service call failed")
-            return False
-        return True
-
     @property
     def vision_tform_sensor(self):
         """Look up vision_tform_sensor for sensor which user clicked.
@@ -246,7 +303,7 @@ class RequestManager:
         Returns:
             math_helpers.SE3Pose
         """
-        clicked_image_proto = self.image_dict[self.clicked_source][0]
+        clicked_image_proto = self.image_dict[self.image_detection_source_name][0]
         frame_name_image_sensor = clicked_image_proto.shot.frame_name_image_sensor
         snapshot = clicked_image_proto.shot.transforms_snapshot
         return frame_helpers.get_a_tform_b(
@@ -260,20 +317,22 @@ class RequestManager:
         Returns:
             DoorCommand.HingeSide
         """
+        assert self.handle_position_side_by_side is not None
+        assert self.hinge_position_side_by_side is not None
         handle_x = self.handle_position_side_by_side[0]
         hinge_x = self.hinge_position_side_by_side[0]
         if handle_x < hinge_x:
-            hinge_side = door_pb2.DoorCommand.HINGE_SIDE_RIGHT
+            hinge_side = door_pb2.DoorCommand.HINGE_SIDE_RIGHT  # type: ignore
         else:
-            hinge_side = door_pb2.DoorCommand.HINGE_SIDE_LEFT
+            hinge_side = door_pb2.DoorCommand.HINGE_SIDE_LEFT  # type: ignore
         return hinge_side
 
 
 def _draw_text_on_image(image, text):
     font_scale = 4
     thickness = 4
-    font = cv2.FONT_HERSHEY_PLAIN
-    (text_width, text_height) = cv2.getTextSize(
+    font = cv2.FONT_HERSHEY_PLAIN  # type: ignore
+    (text_width, text_height) = cv2.getTextSize(  # type:ignore
         text, font, fontScale=font_scale, thickness=thickness
     )[0]
 
@@ -285,8 +344,8 @@ def _draw_text_on_image(image, text):
         (text_offset_x - border, text_offset_y + border),
         (text_offset_x + text_width + border, text_offset_y - text_height - border),
     )
-    cv2.rectangle(image, box_coords[0], box_coords[1], rectangle_bgr, cv2.FILLED)
-    cv2.putText(
+    cv2.rectangle(image, box_coords[0], box_coords[1], rectangle_bgr, cv2.FILLED)  # type: ignore
+    cv2.putText(  # type: ignore
         image,
         text,
         (text_offset_x, text_offset_y),
@@ -386,27 +445,52 @@ def pitch_up(spot_wrapper):
     spot_wrapper.spot_pose(euler_x, euler_y, euler_z, pose_hold_time)
 
 
-def execute_open_door(robot, spot_wrapper, door_detection_service_proxy):
-    """High level behavior sequence for commanding the robot to open a door."""
+def get_door_handle_and_hinge(door_detection_sub_topic, robot, spot_wrapper):
+    door_detections: List[Detection2D] = []
 
-    # Pitch the robot up. This helps ensure that the door is in the field of view of the front
-    # cameras.
-    pitch_up(spot_wrapper)
-    time.sleep(2.0)
+    def cb(msg):
+        door_detections.append(msg)
 
-    request_manager = door_detection_service_proxy(robot)
+    rospy.loginfo("Waiting for door detections on " + door_detection_sub_topic)
+    sub = rospy.Subscriber(door_detection_sub_topic, Detection2D, cb)
+    rospy.sleep(1.5)
+    if len(door_detections) > 0:
+        rospy.loginfo("Received door detection message, collecting more...")
+        rospy.sleep(1.5)
+        sub.unregister()
+
+        request_manager = RequestManager()
+        request_manager.init_ros_image_mode(door_detections)
+        request_manager.get_ros_input_handle_and_hinge()
+
+    else:
+        rospy.logwarn("Autodetection failed: falling back to human-in-the-loop")
+        # Pitch the robot up. This helps ensure that the door is in the field of view of the front
+        # cameras.
+        pitch_up(spot_wrapper)
+        time.sleep(2.0)
+        request_manager = default_door_detection_service_proxy(robot)
 
     # Tell the robot to walk toward the door.
     manipulation_feedback = walk_to_object_in_image(robot, request_manager, debug=False)
-    time.sleep(3.0)
 
     # The ManipulationApiResponse for the WalkToObjectInImage command returns a transform snapshot
     # that contains where user clicked door handle point intersects the world. We use this
     # intersection point to execute the door command.
     snapshot = manipulation_feedback.transforms_snapshot_manipulation_data
+    return snapshot, request_manager
+
+
+def execute_open_door(robot, spot_wrapper, door_detection_sub_topic):
+    """High level behavior sequence for commanding the robot to open a door."""
+
+    snapshot, request_manager = get_door_handle_and_hinge(
+        door_detection_sub_topic, robot, spot_wrapper
+    )
 
     # Execute the door command.
     open_door(robot, request_manager, snapshot)
+
 
 def default_door_detection_service_proxy(robot):
     # Capture images from the two from cameras.
@@ -414,8 +498,9 @@ def default_door_detection_service_proxy(robot):
     image_dict = get_images_as_cv2(robot, sources)
 
     # Get handle and hinge locations from user input.
-    window_name = "Open Door Example"
-    request_manager = RequestManager(image_dict, window_name)
+    window_name = "Door Detection"
+    request_manager = RequestManager()
+    request_manager.init_user_input_mode(image_dict, window_name)
     request_manager.get_user_input_handle_and_hinge()
     assert (
         request_manager.user_input_set()
@@ -424,22 +509,20 @@ def default_door_detection_service_proxy(robot):
     return request_manager
 
 
-def open_door_main(robot, spot_wrapper, door_detection_service_proxy):
+def open_door_main(robot, spot_wrapper, door_detection_sub_topic):
     """Main function for opening door."""
-    if door_detection_service_proxy is None:
-        # no door detection service offered, let's construct a default
-        door_detection_service_proxy = default_door_detection_service_proxy
-
+    success: bool
     try:
         # Execute open door command sequence.
-        execute_open_door(robot, spot_wrapper, door_detection_service_proxy)
+        execute_open_door(robot, spot_wrapper, door_detection_sub_topic)
         comment = "Opened door successfully."
         robot.operator_comment(comment)
         rospy.loginfo(comment)
+        success = True
     except Exception as e:
-        comment = "Failed to open door: {}".format(e)
+        comment = "Failed to open door: {},\n{}".format(e, e.with_traceback)
         rospy.logerr(comment)
         robot.operator_comment(comment)
         rospy.loginfo(comment)
-        return False  # TODO-- I don't love manipulating the control flow in an exception like this --cst
-    return True
+        success = False
+    return success
