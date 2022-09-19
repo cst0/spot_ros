@@ -10,7 +10,7 @@
   <include file="$(find spot_driver)/launch/control.launch" />
   <include file="$(find spot_driver)/launch/accessories.launch" />
 
-  <node pkg="spot_driver_mock" type="spot_ros" name="spot_ros"  ns="spot" output="screen">
+  <node pkg="spot_driver" type="spot_ros_mock" name="spot_ros"  ns="spot" output="screen">
     <rosparam file="$(find spot_driver)/config/spot_ros.yaml" command="load" />
     <param name="username" value="$(arg username)" />
     <param name="password" value="$(arg password)" />
