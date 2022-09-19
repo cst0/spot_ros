@@ -231,90 +231,119 @@ class SpotROSMock:
         rospy.spin()
 
     def handle_grasp_point_userinput(self, _):
+        rospy.loginfo("handle_grasp_point_userinput")
         return TriggerResponse(success=True, message="")
 
     def handle_gripper_open(self, _):
+        rospy.loginfo("handle_gripper_open")
         return TriggerResponse(success=True, message="")
 
     def handle_gripper_close(self, _):
+        rospy.loginfo("handle_gripper_close")
         return TriggerResponse(success=True, message="")
 
     def handle_stow_arm(self, _):
+        rospy.loginfo("handle_stow_arm")
         return TriggerResponse(success=True, message="")
 
     def handle_unstow_arm(self, _):
+        rospy.loginfo("handle_unstow_arm")
         return TriggerResponse(success=True, message="")
 
     def handle_open_door(self, _):
+        rospy.loginfo("handle_open_door")
         return TriggerResponse(success=True, message="")
 
     def handle_list_graph(self, _):
+        rospy.loginfo("handle_list_graph")
         return ListGraphResponse(graphs=[])
 
     def handle_clear_behavior_fault(self, _):
+        rospy.loginfo("handle_clear_behavior_fault")
         return ClearBehaviorFaultResponse(success=True)
 
     def handle_max_vel(self, _):
+        rospy.loginfo("handle_max_vel")
         return SetVelocityResponse(success=True)
 
     def handle_locomotion_mode(self, _):
+        rospy.loginfo("handle_locomotion_mode")
         return SetLocomotionResponse(success=True)
 
     def handle_stair_mode(self, _):
+        rospy.loginfo("handle_stair_mode")
         return SetBoolResponse(success=True)
 
-    def handle_spot_pose(self, _):
+    def handle_spot_pose(self, pose):
+        rospy.loginfo("handle_spot_pose: " + str(pose))
         return SpotPoseResponse(success=True)
 
     def handle_estop_hard(self, _):
+        rospy.loginfo("handle_estop_hard")
         return TriggerResponse(success=True)
 
     def handle_estop_soft(self, _):
+        rospy.loginfo("handle_estop_soft")
         return TriggerResponse(success=True)
 
     def handle_estop_disengage(self, _):
+        rospy.loginfo("handle_estop_disengage")
         return TriggerResponse(success=True)
 
     def handle_power_on(self, _):
+        rospy.loginfo("handle_power_on")
         return TriggerResponse(success=True)
 
     def handle_safe_power_off(self, _):
+        rospy.loginfo("handle_safe_power_off")
         return TriggerResponse(success=True)
 
     def handle_sit(self, _):
+        rospy.loginfo("handle_sit")
         return TriggerResponse(success=True)
 
     def handle_stand(self, _):
+        rospy.loginfo("handle_stand")
         return TriggerResponse(success=True)
 
     def handle_self_right(self, _):
+        rospy.loginfo("handle_self_right")
         return TriggerResponse(success=True)
 
     def handle_stop(self, _):
+        rospy.loginfo("handle_stop")
         return TriggerResponse(success=True)
 
     def handle_release(self, _):
+        rospy.loginfo("handle_release")
         return TriggerResponse(success=True)
 
     def handle_force_claim(self, _):
+        rospy.loginfo("handle_force_claim")
         return TriggerResponse(success=True)
 
     def handle_claim(self, _):
+        rospy.loginfo("handle_claim")
         return TriggerResponse(success=True)
 
     def handle_dock(self, _):
+        rospy.loginfo("handle_dock")
         return DockResponse(success=True)
 
     def handle_undock(self, _):
+        rospy.loginfo("handle_undock")
         return TriggerResponse(success=True)
 
     def handle_get_docking_state(self, _):
+        rospy.loginfo("handle_get_docking_state")
         return GetDockStateResponse(success=True)
 
     def handle_navigate_to(self, _):
+        rospy.loginfo("handle_navigate_to")
         self.navigate_as.set_succeeded()
 
     def handle_trajectory(self, _):
+        rospy.loginfo("handle_trajectory")
         self.trajectory_server.set_succeeded()
 
     def cmdVelCallback(self, _):
