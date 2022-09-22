@@ -46,6 +46,7 @@ add_service_files(
   ClearBehaviorFault.srv
   Dock.srv
   GetDockState.srv
+  SetArmImpedanceParams.srv
 )
 
 add_action_files(
