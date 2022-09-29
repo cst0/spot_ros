@@ -22,6 +22,7 @@ from spot_msgs.msg import LeaseArray, LeaseResource
 from spot_msgs.msg import FootStateArray
 from spot_msgs.msg import EStopStateArray
 from spot_msgs.msg import WiFiState
+from spot_msgs.msg import ManipulatorState
 from spot_msgs.msg import PowerState
 from spot_msgs.msg import BehaviorFaultState
 from spot_msgs.msg import SystemFaultState
@@ -103,6 +104,10 @@ class SpotROS():
             # Battery States #
             battery_states_array_msg = GetBatteryStatesFromState(state, self.spot_wrapper)
             self.battery_pub.publish(battery_states_array_msg)
+
+            # Manipulator State #
+            manipulator_state_msg = GetManipulatorStatesFromState(state, self.spot_wrapper)
+            self.manipulator_pub.publish(manipulator_state_msg)
 
             # Power State #
             power_state_msg = GetPowerStatesFromState(state, self.spot_wrapper)
@@ -700,6 +705,7 @@ class SpotROS():
             self.feet_pub = rospy.Publisher('status/feet', FootStateArray, queue_size=10)
             self.estop_pub = rospy.Publisher('status/estop', EStopStateArray, queue_size=10)
             self.wifi_pub = rospy.Publisher('status/wifi', WiFiState, queue_size=10)
+            self.manipulator_pub = rospy.Publisher('status/manipulator_state', ManipulatorState, queue_size=10)
             self.power_pub = rospy.Publisher('status/power_state', PowerState, queue_size=10)
             self.battery_pub = rospy.Publisher('status/battery_states', BatteryStateArray, queue_size=10)
             self.behavior_faults_pub = rospy.Publisher('status/behavior_faults', BehaviorFaultState, queue_size=10)

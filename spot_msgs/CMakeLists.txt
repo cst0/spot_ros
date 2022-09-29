@@ -30,6 +30,7 @@ add_message_files(
   FootState.msg
   Lease.msg
   LeaseResource.msg
+  ManipulatorState.msg
   PowerState.msg
   SystemFaultState.msg
   DockState.msg
