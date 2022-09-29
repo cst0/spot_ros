@@ -161,8 +161,8 @@ class ArmWrapper:
 
         # First, let's pick a task frame that is in front of the robot on the ground.
         robot_state = robot_state_client.get_robot_state()
-        odom_T_task = get_a_tform_b(robot_state.kinematic_state.transforms_snapshot,
-                                    ODOM_FRAME_NAME, HAND_FRAME_NAME)
+        body_T_task = get_a_tform_b(robot_state.kinematic_state.transforms_snapshot,
+                                    GRAV_ALIGNED_BODY_FRAME_NAME, HAND_FRAME_NAME)
 
         # Now, let's set our tool frame to be the tip of the robot's bottom jaw. Flip the
         # orientation so that when the hand is pointed downwards, the tool's z-axis is
@@ -180,8 +180,8 @@ class ArmWrapper:
         impedance_cmd = robot_cmd.synchronized_command.arm_command.arm_impedance_command
 
         # Set up our root frame, task frame, and tool frame.
-        impedance_cmd.root_frame_name = ODOM_FRAME_NAME
-        impedance_cmd.root_tform_task.CopyFrom(odom_T_task.to_proto())
+        impedance_cmd.root_frame_name = GRAV_ALIGNED_BODY_FRAME_NAME
+        impedance_cmd.root_tform_task.CopyFrom(body_T_task.to_proto())
         impedance_cmd.wrist_tform_tool.CopyFrom(wr1_T_tool.to_proto())
 
         # Set up stiffness and damping matrices. Note: if these values are set too high,
