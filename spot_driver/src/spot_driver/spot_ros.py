@@ -509,6 +509,18 @@ class SpotROS():
         resp = self.spot_wrapper.get_docking_state()
         return GetDockStateResponse(GetDockStatesFromState(resp))
 
+    def handle_roll_over_right(self, req):
+        """Robot sit down and roll on to it its side for easier battery access"""
+        del req
+        resp = self.spot_wrapper.battery_change_pose(1)
+        return TriggerResponse(resp[0], resp[1])
+
+    def handle_roll_over_left(self, req):
+        """Robot sit down and roll on to it its side for easier battery access"""
+        del req
+        resp = self.spot_wrapper.battery_change_pose(2)
+        return TriggerResponse(resp[0], resp[1])
+
     def cmdVelCallback(self, data):
         """Callback for cmd_vel command"""
         self.spot_wrapper.velocity_cmd(data.linear.x, data.linear.y, data.angular.z)
@@ -726,6 +738,10 @@ class SpotROS():
             rospy.Service("dock", Dock, self.handle_dock)
             rospy.Service("undock", Trigger, self.handle_undock)
             rospy.Service("docking_state", GetDockState, self.handle_get_docking_state)
+
+            # Roll Over
+            rospy.Service("roll_over_right", Trigger, self.handle_roll_over_right)
+            rospy.Service("roll_over_left", Trigger, self.handle_roll_over_left)
 
             self.navigate_as = actionlib.SimpleActionServer('navigate_to', NavigateToAction,
                                                             execute_cb = self.handle_navigate_to,
