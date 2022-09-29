@@ -612,6 +612,8 @@ class SpotROS():
 
     def shutdown(self):
         rospy.loginfo("Shutting down ROS driver for Spot")
+        if self.spot_wrapper.check_has_arm():
+            self.spot_wrapper._arm.handle_stow_arm(None)
         self.spot_wrapper.sit()
         rospy.Rate(0.25).sleep()
         self.spot_wrapper.disconnect()
