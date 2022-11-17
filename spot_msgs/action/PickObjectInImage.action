@@ -1,0 +1,13 @@
+string image_source
+geometry_msgs/Point center
+uint8 grasp_constraint
+uint8 FORCE_TOP_DOWN_GRASP   = 1
+uint8 FORCE_HORIZONTAL_GRASP = 2
+uint8 FORCE_45_ANGLE_GRASP   = 3
+uint8 FORCE_SQUEEZE_GRASP    = 4
+duration max_duration
+---
+# did robot picked the object?
+bool success
+---
+string status

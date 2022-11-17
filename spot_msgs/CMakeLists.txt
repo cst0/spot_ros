@@ -55,6 +55,7 @@ add_action_files(
   NavigateTo.action
   OpenDoor.action
   Trajectory.action
+  PickObjectInImage.action
 )
 
 generate_messages(
