@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+
+from spot_driver.network_compute_provider import NetworkComputeProvider
+
+if __name__ == "__main__":
+    NC = NetworkComputeProvider()
+    NC.main()

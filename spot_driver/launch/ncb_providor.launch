@@ -1,0 +1,21 @@
+<launch>
+  <arg name="username" default="dummyusername" />
+  <arg name="password" default="dummypassword" />
+  <arg name="hostname" default="192.168.50.3" />
+  <arg name="ml_service" default="ssd-resnet-coco-server" />
+  <arg name="ml_model" default="ssd_resnet50_v1_fpn_640x640_coco17_tpu-8" />
+  <arg name="ml_confidence" default="0.7" />
+  <arg name="use_gui" default="false" />
+
+  <node pkg="spot_driver" type="ncb_provider" name="ncb_provider" ns="spot" output="screen">
+    <param name="username" value="$(arg username)" />
+    <param name="password" value="$(arg password)" />
+    <param name="hostname" value="$(arg hostname)" />
+    <param name="ml_service" value="$(arg ml_service)" />
+    <param name="ml_model" value="$(arg ml_model)" />
+    <param name="ml_confidence" value="$(arg ml_confidence)" />
+    <param name="use_gui" value="$(arg use_gui)" />
+  </node>
+
+</launch>
+
