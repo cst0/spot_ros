@@ -25,6 +25,7 @@ from bosdyn.client import frame_helpers
 from bosdyn.client import math_helpers
 from bosdyn.client import robot_command
 from bosdyn.client.exceptions import InternalServerError
+from bosdyn.client.lease import ResourceAlreadyClaimedError
 
 from spot_driver.arm.arm_wrapper import ArmWrapper
 
@@ -570,7 +571,10 @@ class SpotWrapper():
 
     def getLease(self):
         """Get a lease for the robot and keep the lease alive automatically."""
-        self._lease = self._lease_client.acquire()
+        try:
+            self._lease = self._lease_client.acquire()
+        except ResourceAlreadyClaimedError:
+            self._lease = self._lease_client.take()
         self._lease_keepalive = LeaseKeepAlive(self._lease_client)
 
     def takeLease(self):
