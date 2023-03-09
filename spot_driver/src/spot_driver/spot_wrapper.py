@@ -66,7 +66,7 @@ side_image_sources = ['left_fisheye_image', 'right_fisheye_image', 'left_depth',
 """List of image sources for rear image periodic query"""
 rear_image_sources = ['back_fisheye_image', 'back_depth']
 """List of image sources for gripper image periodic query"""
-gripper_image_sources = ['hand_color_image', 'hand_depth', 'hand_image']
+gripper_image_sources = ['hand_color_image', 'hand_depth', 'hand_image', 'hand_depth_in_hand_color_frame', 'hand_color_in_hand_depth_frame']
 
 
 class AsyncRobotState(AsyncPeriodicQuery):
