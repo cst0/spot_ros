@@ -256,7 +256,7 @@ class ArmWrapper:
     # mostry copied from spot_driver/src/spot_driver/arm/arm_utilities/object_grabber.py
     def handle_pick_object_in_image(self, goal):
         # image source
-        images = list(filter(lambda img: re.search("^"+goal.image_source+".*_image", img.source.name),
+        images = list(filter(lambda img: re.search("^"+goal.image_source+".*", img.source.name),
                              list(self._spot_wrapper.front_images) +
                              list(self._spot_wrapper.side_images) +
                              list(self._spot_wrapper.rear_images) +
