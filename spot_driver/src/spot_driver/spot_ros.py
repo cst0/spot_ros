@@ -258,21 +258,11 @@ class SpotROS():
         if self.spot_wrapper.check_has_arm() and not data:
             rospy.loginfo_throttle(1, "We have an arm but no gripper image data received... if this happens at the start it's OK, otherwise it's a problem")
         if data:
-            image_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
-            self.gripper_image_pubs[0].publish(image_msg0)
-            self.gripper_camera_info_pubs[0].publish(camera_info_msg0)
-
-            image_msg0, camera_info_msg0 = getImageMsg(data[1], self.spot_wrapper)
-            self.gripper_image_pubs[1].publish(image_msg0)
-            self.gripper_camera_info_pubs[1].publish(camera_info_msg0)
-
-            image_msg0, camera_info_msg0 = getImageMsg(data[2], self.spot_wrapper)
-            self.gripper_image_pubs[2].publish(image_msg0)
-            self.gripper_camera_info_pubs[2].publish(camera_info_msg0)
-
-            self.populate_camera_static_transforms(data[0])
-            self.populate_camera_static_transforms(data[1])
-            self.populate_camera_static_transforms(data[2])
+            for t_data, t_image_pub, t_info_pub in zip(data, self.gripper_image_pubs, self.gripper_camera_info_pubs):
+                image_msg0, camera_info_msg0 = getImageMsg(t_data, self.spot_wrapper)
+                t_image_pub.publish(image_msg0)
+                t_info_pub.publish(camera_info_msg0)
+                self.populate_camera_static_transforms(t_data)
 
     def handle_claim(self, req):
         """ROS service handler for the claim service"""
@@ -692,7 +682,7 @@ class SpotROS():
             self.gripper_image_pubs = []
             self.gripper_camera_info_pubs = []
             if self.spot_wrapper.check_has_arm():
-                for t in ['hand_color', 'hand_depth', 'hand_image']:
+                for t in ['hand_color', 'hand_depth', 'hand_image', 'hand_depth_in_hand_color_frame', 'hand_color_in_hand_depth_frame']:
                     self.gripper_image_pubs.append(rospy.Publisher('camera/'+t+'/image', Image, queue_size=10))
                     self.gripper_camera_info_pubs.append(rospy.Publisher('camera/'+t+'/camera_info', CameraInfo, queue_size=10))
 
