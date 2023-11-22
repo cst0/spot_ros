@@ -25,6 +25,7 @@ from bosdyn.client import frame_helpers
 from bosdyn.client import math_helpers
 from bosdyn.client import robot_command
 from bosdyn.client.exceptions import InternalServerError
+from bosdyn.client.lease import ResourceAlreadyClaimedError
 
 from spot_driver.arm.arm_wrapper import ArmWrapper
 
@@ -65,7 +66,7 @@ side_image_sources = ['left_fisheye_image', 'right_fisheye_image', 'left_depth',
 """List of image sources for rear image periodic query"""
 rear_image_sources = ['back_fisheye_image', 'back_depth']
 """List of image sources for gripper image periodic query"""
-gripper_image_sources = ['hand_color_image', 'hand_depth', 'hand_image']
+gripper_image_sources = ['hand_color_image', 'hand_depth', 'hand_image', 'hand_depth_in_hand_color_frame', 'hand_color_in_hand_depth_frame']
 
 
 class AsyncRobotState(AsyncPeriodicQuery):
@@ -570,7 +571,10 @@ class SpotWrapper():
 
     def getLease(self):
         """Get a lease for the robot and keep the lease alive automatically."""
-        self._lease = self._lease_client.acquire()
+        try:
+            self._lease = self._lease_client.acquire()
+        except ResourceAlreadyClaimedError:
+            self._lease = self._lease_client.take()
         self._lease_keepalive = LeaseKeepAlive(self._lease_client)
 
     def takeLease(self):
@@ -757,6 +761,11 @@ class SpotWrapper():
         ids, eds = self._list_graph_waypoint_and_edge_ids()
         # skip waypoint_ for v2.2.1, skip waypiont for < v2.2
         return [v for k, v in sorted(ids.items(), key=lambda id : int(id[0].replace('waypoint_','')))]
+
+    def battery_change_pose(self, dir_hint=1):
+        """Robot sit down and roll on to it its side for easier battery access"""
+        response = self._robot_command(RobotCommandBuilder.battery_change_pose_command(dir_hint))
+        return response[0], response[1]
 
     def navigate_to(self, upload_path,
                     navigate_to,

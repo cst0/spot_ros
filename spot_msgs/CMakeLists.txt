@@ -30,6 +30,7 @@ add_message_files(
   FootState.msg
   Lease.msg
   LeaseResource.msg
+  ManipulatorState.msg
   PowerState.msg
   SystemFaultState.msg
   DockState.msg
@@ -46,6 +47,7 @@ add_service_files(
   ClearBehaviorFault.srv
   Dock.srv
   GetDockState.srv
+  SetArmImpedanceParams.srv
 )
 
 add_action_files(
@@ -53,6 +55,7 @@ add_action_files(
   NavigateTo.action
   OpenDoor.action
   Trajectory.action
+  PickObjectInImage.action
 )
 
 generate_messages(

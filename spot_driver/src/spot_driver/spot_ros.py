@@ -22,6 +22,7 @@ from spot_msgs.msg import LeaseArray, LeaseResource
 from spot_msgs.msg import FootStateArray
 from spot_msgs.msg import EStopStateArray
 from spot_msgs.msg import WiFiState
+from spot_msgs.msg import ManipulatorState
 from spot_msgs.msg import PowerState
 from spot_msgs.msg import BehaviorFaultState
 from spot_msgs.msg import SystemFaultState
@@ -103,6 +104,10 @@ class SpotROS():
             # Battery States #
             battery_states_array_msg = GetBatteryStatesFromState(state, self.spot_wrapper)
             self.battery_pub.publish(battery_states_array_msg)
+
+            # Manipulator State #
+            manipulator_state_msg = GetManipulatorStatesFromState(state, self.spot_wrapper)
+            self.manipulator_pub.publish(manipulator_state_msg)
 
             # Power State #
             power_state_msg = GetPowerStatesFromState(state, self.spot_wrapper)
@@ -253,21 +258,11 @@ class SpotROS():
         if self.spot_wrapper.check_has_arm() and not data:
             rospy.loginfo_throttle(1, "We have an arm but no gripper image data received... if this happens at the start it's OK, otherwise it's a problem")
         if data:
-            image_msg0, camera_info_msg0 = getImageMsg(data[0], self.spot_wrapper)
-            self.gripper_image_pubs[0].publish(image_msg0)
-            self.gripper_camera_info_pubs[0].publish(camera_info_msg0)
-
-            image_msg0, camera_info_msg0 = getImageMsg(data[1], self.spot_wrapper)
-            self.gripper_image_pubs[1].publish(image_msg0)
-            self.gripper_camera_info_pubs[1].publish(camera_info_msg0)
-
-            image_msg0, camera_info_msg0 = getImageMsg(data[2], self.spot_wrapper)
-            self.gripper_image_pubs[2].publish(image_msg0)
-            self.gripper_camera_info_pubs[2].publish(camera_info_msg0)
-
-            self.populate_camera_static_transforms(data[0])
-            self.populate_camera_static_transforms(data[1])
-            self.populate_camera_static_transforms(data[2])
+            for t_data, t_image_pub, t_info_pub in zip(data, self.gripper_image_pubs, self.gripper_camera_info_pubs):
+                image_msg0, camera_info_msg0 = getImageMsg(t_data, self.spot_wrapper)
+                t_image_pub.publish(image_msg0)
+                t_info_pub.publish(camera_info_msg0)
+                self.populate_camera_static_transforms(t_data)
 
     def handle_claim(self, req):
         """ROS service handler for the claim service"""
@@ -509,6 +504,18 @@ class SpotROS():
         resp = self.spot_wrapper.get_docking_state()
         return GetDockStateResponse(GetDockStatesFromState(resp))
 
+    def handle_roll_over_right(self, req):
+        """Robot sit down and roll on to it its side for easier battery access"""
+        del req
+        resp = self.spot_wrapper.battery_change_pose(1)
+        return TriggerResponse(resp[0], resp[1])
+
+    def handle_roll_over_left(self, req):
+        """Robot sit down and roll on to it its side for easier battery access"""
+        del req
+        resp = self.spot_wrapper.battery_change_pose(2)
+        return TriggerResponse(resp[0], resp[1])
+
     def cmdVelCallback(self, data):
         """Callback for cmd_vel command"""
         self.spot_wrapper.velocity_cmd(data.linear.x, data.linear.y, data.angular.z)
@@ -595,6 +602,8 @@ class SpotROS():
 
     def shutdown(self):
         rospy.loginfo("Shutting down ROS driver for Spot")
+        if self.spot_wrapper.check_has_arm():
+            self.spot_wrapper._arm.handle_stow_arm(None)
         self.spot_wrapper.sit()
         rospy.Rate(0.25).sleep()
         self.spot_wrapper.disconnect()
@@ -673,7 +682,7 @@ class SpotROS():
             self.gripper_image_pubs = []
             self.gripper_camera_info_pubs = []
             if self.spot_wrapper.check_has_arm():
-                for t in ['hand_color', 'hand_depth', 'hand_image']:
+                for t in ['hand_color', 'hand_depth', 'hand_image', 'hand_depth_in_hand_color_frame', 'hand_color_in_hand_depth_frame']:
                     self.gripper_image_pubs.append(rospy.Publisher('camera/'+t+'/image', Image, queue_size=10))
                     self.gripper_camera_info_pubs.append(rospy.Publisher('camera/'+t+'/camera_info', CameraInfo, queue_size=10))
 
@@ -688,6 +697,7 @@ class SpotROS():
             self.feet_pub = rospy.Publisher('status/feet', FootStateArray, queue_size=10)
             self.estop_pub = rospy.Publisher('status/estop', EStopStateArray, queue_size=10)
             self.wifi_pub = rospy.Publisher('status/wifi', WiFiState, queue_size=10)
+            self.manipulator_pub = rospy.Publisher('status/manipulator_state', ManipulatorState, queue_size=10)
             self.power_pub = rospy.Publisher('status/power_state', PowerState, queue_size=10)
             self.battery_pub = rospy.Publisher('status/battery_states', BatteryStateArray, queue_size=10)
             self.behavior_faults_pub = rospy.Publisher('status/behavior_faults', BehaviorFaultState, queue_size=10)
@@ -726,6 +736,10 @@ class SpotROS():
             rospy.Service("dock", Dock, self.handle_dock)
             rospy.Service("undock", Trigger, self.handle_undock)
             rospy.Service("docking_state", GetDockState, self.handle_get_docking_state)
+
+            # Roll Over
+            rospy.Service("roll_over_right", Trigger, self.handle_roll_over_right)
+            rospy.Service("roll_over_left", Trigger, self.handle_roll_over_left)
 
             self.navigate_as = actionlib.SimpleActionServer('navigate_to', NavigateToAction,
                                                             execute_cb = self.handle_navigate_to,

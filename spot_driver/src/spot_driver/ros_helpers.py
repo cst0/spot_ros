@@ -5,6 +5,8 @@ from tf2_msgs.msg import TFMessage
 from geometry_msgs.msg import TransformStamped
 from sensor_msgs.msg import Image, CameraInfo
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Vector3
 from geometry_msgs.msg import PoseWithCovariance
 from geometry_msgs.msg import TwistWithCovariance
 from geometry_msgs.msg import TwistWithCovarianceStamped
@@ -15,6 +17,7 @@ from spot_msgs.msg import LeaseArray, LeaseResource
 from spot_msgs.msg import FootState, FootStateArray
 from spot_msgs.msg import EStopState, EStopStateArray
 from spot_msgs.msg import WiFiState
+from spot_msgs.msg import ManipulatorState
 from spot_msgs.msg import PowerState
 from spot_msgs.msg import BehaviorFault, BehaviorFaultState
 from spot_msgs.msg import SystemFault, SystemFaultState
@@ -374,6 +377,40 @@ def GetBatteryStatesFromState(state, spot_wrapper):
         battery_states_array_msg.battery_states.append(battery_msg)
 
     return battery_states_array_msg
+
+def GetManipulatorStatesFromState(state, spot_wrapper):
+    """Maps manipulator state data from robot state proto to ROS ManipulatorState message
+
+    Args:
+        data: Robot State proto
+        spot_wrapper: A SpotWrapper object
+    Returns:
+        ManipulatorState message
+    """
+    manipulator_state_msg = ManipulatorState()
+    manipulator_state_msg.gripper_open_percentage = state.manipulator_state.gripper_open_percentage
+    manipulator_state_msg.is_gripper_holding_item = state.manipulator_state.is_gripper_holding_item
+    manipulator_state_msg.estimated_end_effector_force_in_hand = Vector3()
+    manipulator_state_msg.estimated_end_effector_force_in_hand.x = state.manipulator_state.estimated_end_effector_force_in_hand.x
+    manipulator_state_msg.estimated_end_effector_force_in_hand.y = state.manipulator_state.estimated_end_effector_force_in_hand.y
+    manipulator_state_msg.estimated_end_effector_force_in_hand.z = state.manipulator_state.estimated_end_effector_force_in_hand.z
+    manipulator_state_msg.stow_state = state.manipulator_state.stow_state
+    manipulator_state_msg.velocity_of_hand_in_vision = Twist()
+    manipulator_state_msg.velocity_of_hand_in_vision.linear.x = state.manipulator_state.velocity_of_hand_in_vision.linear.x
+    manipulator_state_msg.velocity_of_hand_in_vision.linear.y = state.manipulator_state.velocity_of_hand_in_vision.linear.y
+    manipulator_state_msg.velocity_of_hand_in_vision.linear.z = state.manipulator_state.velocity_of_hand_in_vision.linear.z
+    manipulator_state_msg.velocity_of_hand_in_vision.angular.x = state.manipulator_state.velocity_of_hand_in_vision.angular.x
+    manipulator_state_msg.velocity_of_hand_in_vision.angular.y = state.manipulator_state.velocity_of_hand_in_vision.angular.y
+    manipulator_state_msg.velocity_of_hand_in_vision.angular.z = state.manipulator_state.velocity_of_hand_in_vision.angular.z
+    manipulator_state_msg.velocity_of_hand_in_odom = Twist()
+    manipulator_state_msg.velocity_of_hand_in_odom.linear.x = state.manipulator_state.velocity_of_hand_in_odom.linear.x
+    manipulator_state_msg.velocity_of_hand_in_odom.linear.y = state.manipulator_state.velocity_of_hand_in_odom.linear.y
+    manipulator_state_msg.velocity_of_hand_in_odom.linear.z = state.manipulator_state.velocity_of_hand_in_odom.linear.z
+    manipulator_state_msg.velocity_of_hand_in_odom.angular.x = state.manipulator_state.velocity_of_hand_in_odom.angular.x
+    manipulator_state_msg.velocity_of_hand_in_odom.angular.y = state.manipulator_state.velocity_of_hand_in_odom.angular.y
+    manipulator_state_msg.velocity_of_hand_in_odom.angular.z = state.manipulator_state.velocity_of_hand_in_odom.angular.z
+    manipulator_state_msg.carry_state = state.manipulator_state.carry_state
+    return manipulator_state_msg
 
 def GetPowerStatesFromState(state, spot_wrapper):
     """Maps power state data from robot state proto to ROS PowerState message
